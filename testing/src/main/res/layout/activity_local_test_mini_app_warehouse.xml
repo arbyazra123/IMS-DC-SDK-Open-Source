@@ -2,10 +2,11 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    tools:context=".LocalTestingMainActivity">
+    tools:context=".LocalTestMiniAppWarehouseActivity">
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="60dp">
@@ -22,57 +23,29 @@
             android:includeFontPadding="false"
             android:textColor="@color/black"
             android:textSize="20sp"
-            android:text="本地调试"/>
+            android:text="小程序运管仓库"/>
         <Button
-            android:id="@+id/btn_setting"
+            android:id="@+id/btn_add"
             android:layout_gravity="right|center_vertical"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:paddingTop="8dp"
             android:paddingBottom="8dp"
             android:textSize="16sp"
-            android:text="配置"/>
+            android:textColor="@color/green"
+            android:text="新增"/>
+
     </FrameLayout>
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="#e7e7e7"/>
-    <LinearLayout
+    <androidx.recyclerview.widget.RecyclerView
+        android:layout_marginTop="10dp"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:gravity="center|bottom"
-            android:paddingBottom="100dp"
-            android:orientation="horizontal">
-            <Button
-                android:id="@+id/btn_fake_incall"
-                android:layout_width="100dp"
-                android:layout_height="100dp"
-                android:enabled="false"
-                android:background="@drawable/button_answer_selector"/>
-
-            <Button
-                android:layout_marginLeft="80dp"
-                android:id="@+id/btn_fake_endcall"
-                android:layout_width="100dp"
-                android:layout_height="100dp"
-                android:enabled="false"
-                android:background="@drawable/button_hangup_selector"/>
-        </LinearLayout>
-
-        <Button
-            android:id="@+id/btn_fake_precall"
-            android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:text="模拟来电" />
-    </LinearLayout>
-
-
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:id="@+id/recyclerview"/>
 
 
 </LinearLayout>
