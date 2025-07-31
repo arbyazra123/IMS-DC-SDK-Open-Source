@@ -14,13 +14,23 @@
  *   limitations under the License.
  */
 
-package com.ct.ertclib.dc.core.data.miniapp
+package com.ct.ertclib.dc.core.port.dao
 
-object MiniAppStartParam {
-    const val MINIAPP_APPTYPE_MINIAPP = "miniapp"
-    const val MINIAPP_APPTYPE_CAMERA = "camera"
-    const val MINIAPP_APPTYPE_FILE = "file"
-    const val MINIAPP_APPTYPE_MAP = "map"
-    const val MINIAPP_APPTYPE_BROWSER = "browser"
-    const val MINIAPP_APPTYPE_MINIAPP_WITH_PARAMS = "miniappWithParams"
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import com.ct.ertclib.dc.core.data.model.FileEntity
+
+@Dao
+interface FileDao {
+
+    @Query("SELECT * FROM files WHERE name LIKE '%' || :name || '%'")
+    fun queryFiles(name: String): List<FileEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun upsertFiles(fileEntities: List<FileEntity>)
+
+    @Query("SELECT COUNT(*) FROM files")
+    fun queryFileCount(): Long
 }

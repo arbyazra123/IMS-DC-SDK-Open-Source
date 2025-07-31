@@ -14,13 +14,14 @@
  *   limitations under the License.
  */
 
-package com.ct.ertclib.dc.core.data.miniapp
+package com.ct.ertclib.dc.core.data.model
 
-object MiniAppStartParam {
-    const val MINIAPP_APPTYPE_MINIAPP = "miniapp"
-    const val MINIAPP_APPTYPE_CAMERA = "camera"
-    const val MINIAPP_APPTYPE_FILE = "file"
-    const val MINIAPP_APPTYPE_MAP = "map"
-    const val MINIAPP_APPTYPE_BROWSER = "browser"
-    const val MINIAPP_APPTYPE_MINIAPP_WITH_PARAMS = "miniappWithParams"
-}
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "files")
+data class FileEntity(
+    @PrimaryKey
+    var path: String,
+    var name: String,// 有些path中的文件名是处理后的数字，所以需要保存原文件名
+)
