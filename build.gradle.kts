@@ -17,11 +17,12 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 buildscript {
     repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
         maven(url = "https://maven.aliyun.com/repository/public")
         maven(url = "https://maven.aliyun.com/repository/google")
         maven(url = "https://jitpack.io")
-        google()
-        mavenCentral()
         flatDir {
             dirs("libs")
         }

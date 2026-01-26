@@ -17,11 +17,11 @@
 pluginManagement {
     includeBuild("build-logic")
     repositories {
-        maven(url = "https://maven.aliyun.com/repository/public")
-        maven(url = "https://maven.aliyun.com/repository/google")
         google()
         mavenCentral()
         gradlePluginPortal()
+        maven(url = "https://maven.aliyun.com/repository/public")
+        maven(url = "https://maven.aliyun.com/repository/google")
         flatDir {
             dirs("libs")
         }

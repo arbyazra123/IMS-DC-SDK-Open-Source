@@ -16,10 +16,11 @@
 
 dependencyResolutionManagement {
     repositories {
-        maven(url = "https://maven.aliyun.com/repository/public")
-        maven(url = "https://maven.aliyun.com/repository/google")
         google()
         mavenCentral()
+        gradlePluginPortal()
+        maven(url = "https://maven.aliyun.com/repository/public")
+        maven(url = "https://maven.aliyun.com/repository/google")
     }
     versionCatalogs {
         create("libs") {
