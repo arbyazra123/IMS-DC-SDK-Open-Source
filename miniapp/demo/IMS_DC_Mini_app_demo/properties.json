@@ -1,0 +1,23 @@
+{
+  "appId": "333",
+  "version": "1.0.8",
+  "permissions": [
+    "MINIAPP_EXTERNAL_STORAGE",
+    "MINIAPP_ACCESS_MINIAPPINFO",
+    "MINIAPP_CAMERA",
+    "MINIAPP_RECORD_AUDIO",
+    "MINIAPP_READ_CONTACTS",
+    "MINIAPP_GET_CALL_STATE",
+    "MINIAPP_LOCATION",
+    "MINIAPP_READ_CONTACTS"
+  ],
+  "windowStyle": {
+    "isFullScreen":false,
+    "statusBarColor": "#FFFFFF",
+    "statusBarTitleColor": 0,
+    "navigationBarColor": "#FFFFFF"
+  },
+  "shouldCreateControlADC": true,
+  "shouldStartRemoteApp": true,
+  "canStartedByOthers": true
+}

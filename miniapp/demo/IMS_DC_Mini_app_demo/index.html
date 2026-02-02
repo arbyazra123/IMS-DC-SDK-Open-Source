@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="./favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Vite App</title>
+    <style>
+        /* 重置样式 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* Body样式 - 确保可以滚动 */
+        body {
+            background-color: white;
+            width: 100%;
+            min-height: 100vh;
+            overflow-x: hidden;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        /* 安全区域适配 */
+        @supports (padding-top: env(safe-area-inset-top)) {
+            body {
+                padding-top: env(safe-area-inset-top);
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+        }
+
+        /* App容器 - 不限制高度 */
+        #app {
+            width: 100%;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* 移动端优化 */
+        @media (max-width: 768px) {
+            body {
+                /* 修复iOS Safari 100vh问题 */
+                min-height: -webkit-fill-available;
+            }
+
+            /* 防止iOS橡皮筋效果 */
+            body {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                overflow-y: scroll;
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+
+        /* 原有的其他样式保持不变 */
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .file-video {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            bottom: 0;
+            right: 0;
+            object-fit: cover;
+            z-index: 1;
+        }
+        .canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+        }
+        .local-canvas {
+            display: block;
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 180px;
+            height: 180px;
+            z-index: 3;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.3);
+        }
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            z-index: 4;
+        }
+        .preview {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 1px;
+            height: 1px;
+            object-fit: cover;
+            transform: scaleX(-1);
+            z-index: 3;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 12px 24px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border-radius: 8px;
+            font-size: 18px;
+            z-index: 5;
+        }
+        .hangup {
+            position: absolute;
+            height: 10vh;
+            bottom: 10vh;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 4;
+        }
+    </style>
+  <script type="module" crossorigin src="./assets/index-iY0_NdMI.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-pEzFZ-TM.css">
+  <script type="module">import.meta.url;import("_").catch(()=>1);(async function*(){})().next();if(location.protocol!="file:"){window.__vite_is_modern_browser=true}</script>
+  <script type="module">!function(){if(window.__vite_is_modern_browser)return;console.warn("vite: loading legacy chunks, syntax error above and the same error below should be ignored");var e=document.getElementById("vite-legacy-polyfill"),n=document.createElement("script");n.src=e.src,n.onload=function(){System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))},document.body.appendChild(n)}();</script>
+</head>
+<body>
+<div id="app"></div>
+<script>
+    // 针对iOS的额外修复
+    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+        // 修复iOS 100vh问题
+        function setRealHeight() {
+            const vh = window.innerHeight * 0.01;
+            document.documentElement.style.setProperty('--vh', `${vh}px`);
+
+            // 更新body高度
+            document.body.style.height = `${window.innerHeight}px`;
+        }
+
+        setRealHeight();
+        window.addEventListener('resize', setRealHeight);
+        window.addEventListener('orientationchange', setRealHeight);
+    }
+</script>
+  <script nomodule>!function(){var e=document,t=e.createElement("script");if(!("noModule"in t)&&"onbeforeload"in t){var n=!1;e.addEventListener("beforeload",(function(e){if(e.target===t)n=!0;else if(!e.target.hasAttribute("nomodule")||!n)return;e.preventDefault()}),!0),t.type="module",t.src=".",e.head.appendChild(t),t.remove()}}();</script>
+  <script nomodule crossorigin id="vite-legacy-polyfill" src="./assets/polyfills-legacy-BlJ-5Mxc.js"></script>
+  <script nomodule crossorigin id="vite-legacy-entry" data-src="./assets/index-legacy-CLv5EBgP.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>
+</body>
+</html>

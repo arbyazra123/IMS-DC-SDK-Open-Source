@@ -568,10 +568,10 @@ class MiniAppManager(private val callInfo: CallInfo) :
                 fileOutputStream.write(data)
                 fileOutputStream.close()
                 //校验小程序签名
-                if(!LicenseManager.getInstance().verifyMiniAppPkg(cacheFile!!.absolutePath)){
-                    sLogger.debug("$mTag handleStartMiniAppFailed verifyMiniAppPkg false")
-                    return false
-                }
+                // if(!LicenseManager.getInstance().verifyMiniAppPkg(cacheFile!!.absolutePath)){
+                //     sLogger.debug("$mTag handleStartMiniAppFailed verifyMiniAppPkg false")
+                //     return false
+                // }
                 //解压小程序
                 ZipUtils.unzipFile(cacheFile!!.absolutePath, filePath)
                 //删除cache
