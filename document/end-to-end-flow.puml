@@ -1,0 +1,182 @@
+@startuml IMS-DC-SDK End-to-End Flow
+
+title 5G New Calling Terminal SDK (IMS Data Channel SDK) - End-to-End Flow
+
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam wrapWidth 200
+skinparam maxMessageSize 150
+
+' Define actors
+actor "User" as User
+actor "Remote Party" as Remote
+
+' Define components by layer
+package "Android Framework Layer" {
+    component [Telecom Framework] as Telecom
+    component [InCallService] as InCall
+}
+
+package "SDK Core Layer" {
+    component [InCallServiceImpl] as InCallImpl
+
+    package "Core Managers" {
+        component [NewCallsManager] as CallMgr
+        component [DCManager] as DCMgr
+        component [MiniAppManager] as AppMgr
+        component [ExpandingCapacityManager] as ECMgr
+    }
+}
+
+package "Mini App Layer" {
+    component [MiniAppActivity\n(WebView Container)] as WebView
+    component [DSBridge\n(JS-Native Bridge)] as DSBridge
+    component [Mini App\n(HTML5/Vue.js)] as MiniApp
+
+    package "JavaScript API System" {
+        component [JSApi] as JSApi
+        component [JsEventDispatcherFactory] as Factory
+
+        package "Event Dispatchers" {
+            component [DCJsEventDispatcher] as DCDispatcher
+            component [MiniAppJsEventDispatcher] as AppDispatcher
+            component [FileJsEventDispatcher] as FileDispatcher
+            component [ECJsEventDispatcher] as ECDispatcher
+        }
+
+        package "Use Cases" {
+            component [DCMiniUseCase] as DCUseCase
+            component [MiniAppMiniUseCase] as AppUseCase
+            component [FileMiniUseCase] as FileUseCase
+        }
+    }
+}
+
+package "Terminal Interface Layer (AIDL)" {
+    component [DCServiceManager] as DCService
+
+    interface "IImsDataChannel" as IDC
+    interface "IImsDataChannelCallback" as IDCCallback
+    interface "IExpandingCapacity" as IEC
+}
+
+package "Modem/Chipset Layer" {
+    component [5G Modem\n(IMS Data Channel\nImplementation)] as Modem
+}
+
+package "Network Layer" {
+    cloud "5G Network\n(IMS Core)" as Network
+}
+
+' Define relationships - Call Lifecycle Flow
+User --> Telecom : Initiates/Receives Call
+Telecom --> InCall : onBind()
+InCall --> InCallImpl : Service Binding
+
+InCallImpl --> CallMgr : Initialize (First Call)
+InCallImpl --> DCMgr : Initialize (First Call)
+InCallImpl --> AppMgr : Initialize (First Call)
+InCallImpl --> ECMgr : Initialize (First Call)
+
+CallMgr --> InCallImpl : onCallAdded Event
+InCallImpl --> AppMgr : Notify Call Added
+
+' Mini App Loading Flow
+AppMgr --> WebView : Start Mini App
+WebView --> MiniApp : Load HTML/JS
+MiniApp --> DSBridge : Initialize Bridge
+DSBridge --> JSApi : Register APIs
+
+' Data Channel Creation Flow
+User --> MiniApp : Click "Create DC"
+MiniApp --> DSBridge : dsbridge.call('async', {...})
+DSBridge --> JSApi : async(msg, handler)
+JSApi --> Factory : getEventDispatcher('dc')
+Factory --> DCDispatcher : Route Event
+DCDispatcher --> DCUseCase : createAppDataChannel()
+DCUseCase --> AppMgr : Validate & Process
+AppMgr --> DCMgr : createDC(labels, description)
+DCMgr --> DCService : createImsDc(labels, ...)
+DCService --> IDC : AIDL Call
+IDC --> Modem : Create Data Channels
+Modem --> Network : Negotiate DC Creation
+Network --> Remote : DC Negotiation
+
+' Data Channel Response Flow
+Network --> Modem : DC Created Response
+Modem --> IDCCallback : onApplicationDataChannelResponse(dc)
+IDCCallback --> DCMgr : Cache DC & Route
+DCMgr --> AppMgr : onDataChannelCreated()
+AppMgr --> MiniApp : Notify DC Ready
+MiniApp --> User : Display "DC Created"
+
+' Data Transmission Flow
+MiniApp --> DSBridge : sendData(dcId, data)
+DSBridge --> JSApi : async('dc', 'sendData', ...)
+JSApi --> DCDispatcher : Route Event
+DCDispatcher --> DCUseCase : sendData()
+DCUseCase --> DCMgr : Get DC from Cache
+DCMgr --> IDC : dc.send(data)
+IDC --> Modem : Transmit Data
+Modem --> Network : Send via IMS DC
+Network --> Remote : Deliver Data
+
+' Extended Capabilities Flow
+MiniApp --> DSBridge : Call EC API (AI, Translation)
+DSBridge --> JSApi : async('ec', ...)
+JSApi --> ECDispatcher : Route Event
+ECDispatcher --> ECMgr : Process Request
+ECMgr --> IEC : Call OEM/Operator EC
+IEC --> ECMgr : EC Response
+ECMgr --> MiniApp : Return Result
+
+' Call End Flow
+User --> Telecom : End Call
+Telecom --> InCallImpl : onCallRemoved()
+InCallImpl --> AppMgr : Cleanup Mini Apps
+InCallImpl --> DCMgr : Close All DCs
+DCMgr --> IDC : close()
+InCallImpl --> ECMgr : Release Resources
+
+note right of InCallImpl
+  Entry point of SDK
+  - Monitors call lifecycle
+  - Initializes all managers
+  - Tied to active calls
+end note
+
+note right of DCMgr
+  Data Channel Management
+  - Queue-based DC creation
+  - DC caching & reuse
+  - State monitoring
+  - Listener routing
+end note
+
+note right of AppMgr
+  Mini App Lifecycle
+  - App package management
+  - Active/Passive startup
+  - Auto-load policies
+  - Multi-process support
+  (up to 10 concurrent apps)
+end note
+
+note right of Factory
+  Event Routing System
+  - 'dc' → Data Channel ops
+  - 'miniapp' → App control
+  - 'file' → File operations
+  - 'screen' → Screen sharing
+  - 'ec' → Extended capabilities
+  - 'system' → System info
+end note
+
+note bottom of Modem
+  3GPP TS.71 Specification
+  - IMS Data Channel
+  - WebRTC-based (TS.66)
+  - 5G New Calling
+end note
+
+@enduml

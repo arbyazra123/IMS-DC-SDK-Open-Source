@@ -1,0 +1,88 @@
+@startuml File Structure and Flow
+
+title IMS-DC-SDK: Key Files Involved in Data Channel Creation
+
+skinparam defaultTextAlignment left
+skinparam componentStyle rectangle
+
+package "Mini App Layer" {
+    [main.vue\n\nPath: miniapp/demo/IMS_DC_Mini_app_demo_source_code/\n      src/pages/main.vue\n\nKey Code:\n- dsbridge.call('async', {...})\n- User interaction handlers\n- DC event listeners] as MiniAppFile #LightGreen
+}
+
+package "Bridge Layer" {
+    [JSApi.kt\n\nPath: core/src/main/java/com/ct/ertclib/dc/core/\n      miniapp/bridge/JSApi.kt\n\nKey Functions:\n- fun async(msg: Any, handler: CompletionHandler)\n  Line 48\n- fun sync(msg: Any): String?\n  Line 62] as JSApiFile #AliceBlue
+}
+
+package "Dispatcher Layer" {
+    [JsEventDispatcherFactory.kt\n\nPath: core/src/main/java/com/ct/ertclib/dc/core/\n      factory/JsEventDispatcherFactory.kt\n\nKey Function:\n- fun getEventDispatcher(event: String)\n  Routes: 'dc', 'miniapp', 'file', 'screen', 'ec', 'system'] as FactoryFile #AliceBlue
+
+    [DCJsEventDispatcher.kt\n\nPath: core/src/main/java/com/ct/ertclib/dc/core/\n      dispatcher/js/DCJsEventDispatcher.kt\n\nKey Functions:\n- dispatchAsyncMessage(context, request, handler)\n  Line 36\n  Routes to:\n  • createAppDataChannel\n  • closeAppDataChannel\n  • sendData\n  • isPeerSupportDC] as DCDispatcherFile #AliceBlue
+}
+
+package "Use Case Layer" {
+    [DCMiniUseCase.kt\n\nPath: core/src/main/java/com/ct/ertclib/dc/core/\n      usecase/miniapp/DCMiniUseCase.kt\n\nKey Functions:\n- createAppDataChannel(context, params, handler)\n  Line 52\n  • Validates dcLabels\n  • Validates DataChannelAppInfoXml\n  • Checks appId\n  • Inserts StreamId if missing\n\n- sendData(context, params, handler)\n  Line 95\n\n- closeAppDataChannel(context, params, handler)\n  Line 124\n\n- isPeerSupportDC(context, params, handler)\n  Line 149\n\n- getBufferedAmount(context, params): String\n  Line 181] as DCUseCaseFile #LightYellow
+}
+
+package "Manager Layer" {
+    [MiniAppManager.kt\n\nPath: core/src/main/java/com/ct/ertclib/dc/core/\n      miniapp/MiniAppManager.kt\n\nKey Functions:\n- startMiniApp(appId, startCallback, startType)\n  Line 476\n\n- createApplicationDataChannelsInternal(\n    dcLabels, description, telecomCallId, listener)\n  Line 817\n\n- registerAppDataChannelCallbackInternal(\n    appId, createListener)\n  Line 953\n\n- onDataChannelCreated(callId, streamId, dc)\n  Implements IDcCreateListener\n\n- onCallAdded(context, callInfo)\n  Line 775\n\n- onCallRemoved(context, callInfo)\n  Line 785] as MiniAppMgrFile #LightCyan
+
+    [DCManager.kt\n\nPath: core/src/main/java/com/ct/ertclib/dc/core/\n      manager/call/DCManager.kt\n\nKey Functions:\n- createApplicationDataChannels(\n    dcLabels, description, slotId,\n    callId, remoteNumber, listener)\n  Line 328\n\n- startCreateADCQueue()\n  Background coroutine processing queue\n\n- onCallAdded(context, callInfo)\n  Line 93\n\n- registerAppDataChannelCallback(\n    callId, appId, dcCreateListener)\n  Line 350\n\n- addDataChannel(adcKey, dc)\n  Line 310\n\nKey Data Structures:\n- mAdcMap: Cache of open DCs\n- createAdcQueue: Queue for DC creation\n- mBdcCreateListenerMap: BDC listeners\n- mAdcCreateListenerMap: ADC listeners\n\nInner Class:\n- ImsDcCallback implements IImsDataChannelCallback\n  • onApplicationDataChannelResponse(dc)\n    Line 217] as DCMgrFile #LightCyan
+}
+
+package "Service Layer" {
+    [InCallServiceImpl.kt\n\nPath: core/src/main/java/com/ct/ertclib/dc/core/\n      service/InCallServiceImpl.kt\n\nKey Functions:\n- onBind(intent): IBinder?\n  Line 76\n  • Initialize SDK\n  • Check permissions\n  • Clean expired data\n\n- onCallAdded(call: Call?)\n  Line 133\n  • Initialize managers (first call)\n  • Notify all managers\n\n- onCallRemoved(call: Call?)\n  Line 214\n  • Cleanup mini apps\n  • Close data channels\n  • Release resources\n\n- onUnbind(intent): Boolean\n  Line 233\n  • Final cleanup] as InCallServiceFile #LightSalmon
+
+    [DCServiceManager.kt\n\nPath: core/src/main/java/com/ct/ertclib/dc/core/\n      manager/service/DCServiceManager.kt\n\nKey Functions:\n- createImsDc(\n    labels, description,\n    slotId, callId, remoteNumber)\n  Wraps AIDL interface call\n\n- bindService(context, callback)\n  Connect to terminal service\n\n- registerCallback(callback)\n  Register for DC state changes] as DCServiceMgrFile #LightSalmon
+}
+
+package "AIDL Interface Layer" {
+    [IImsDataChannel.aidl\n\nPath: core/src/main/aidl/com/newcalllib/\n      datachannel/V1_0/IImsDataChannel.aidl\n\nInterface Methods:\n- void send(byte data, int size, IDCSendDataCallback callback)\n- void close()\n- long bufferedAmount()\n- String getDcLabel()\n- String getStreamId()\n- ImsDCStatus getState()] as IIDCFile #LightGray
+
+    [IImsDataChannelCallback.aidl\n\nPath: core/src/main/aidl/com/newcalllib/\n      datachannel/V1_0/IImsDataChannelCallback.aidl\n\nInterface Methods:\n- onBootstrapDataChannelResponse(IImsDataChannel dc)\n- onApplicationDataChannelResponse(IImsDataChannel dc)] as IIDCCallbackFile #LightGray
+
+    [IImsDataChannelServiceController.aidl\n\nPath: core/src/main/aidl/com/newcalllib/\n      datachannel/V1_0/\n      IImsDataChannelServiceController.aidl\n\nInterface Methods:\n- void createApplicationDataChannel(\n    String labels, String description)\n- void registerCallback(IImsDataChannelCallback callback)] as ServiceControllerFile #LightGray
+}
+
+package "Terminal Implementation" {
+    [Modem/Chipset\n(OEM Implementation)\n\nImplements:\n- IImsDataChannelServiceController\n- Creates actual WebRTC data channels\n- Negotiates with 5G network\n- Callbacks via IImsDataChannelCallback] as ModemImpl #WhiteSmoke
+}
+
+' Flow relationships
+MiniAppFile --> JSApiFile : 1. dsbridge.call()
+JSApiFile --> FactoryFile : 2. getEventDispatcher('dc')
+FactoryFile --> DCDispatcherFile : 3. Returns DCJsEventDispatcher
+DCDispatcherFile --> DCUseCaseFile : 4. createAppDataChannel()
+DCUseCaseFile --> MiniAppMgrFile : 5. createDC()
+MiniAppMgrFile --> DCMgrFile : 6. createApplicationDataChannels()
+DCMgrFile --> DCServiceMgrFile : 7. createImsDc()
+DCServiceMgrFile --> ServiceControllerFile : 8. AIDL Call
+ServiceControllerFile --> ModemImpl : 9. Create DC
+ModemImpl --> IIDCCallbackFile : 10. Callback
+IIDCCallbackFile --> DCMgrFile : 11. onApplicationDataChannelResponse()
+DCMgrFile --> MiniAppMgrFile : 12. onDataChannelCreated()
+MiniAppMgrFile --> MiniAppFile : 13. Notify mini app
+
+InCallServiceFile .down.> MiniAppMgrFile : Initializes
+InCallServiceFile .down.> DCMgrFile : Initializes
+IIDCFile .up.> ModemImpl : Implemented by
+
+note bottom of ModemImpl
+  **Terminal Implementation**
+  Provided by phone manufacturer (Qualcomm, MediaTek, etc.)
+  Must implement 3GPP TS.71 specification
+  Handles actual 5G radio communication
+end note
+
+legend right
+  |= Layer |= Purpose |
+  | Mini App | User interface (HTML5/JS) |
+  | Bridge | JS ↔ Native translation |
+  | Dispatcher | Event routing |
+  | Use Case | Business logic & validation |
+  | Manager | State management & orchestration |
+  | Service | Lifecycle & AIDL wrapper |
+  | AIDL | Interface to terminal |
+  | Terminal | Modem/chipset implementation |
+endlegend
+
+@enduml

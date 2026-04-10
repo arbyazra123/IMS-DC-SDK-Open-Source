@@ -1,0 +1,144 @@
+@startuml Simplified IMS-DC-SDK Flow Summary
+
+title Simplified Flow: How Mini Apps Use Data Channels in 5G Calls
+
+skinparam backgroundColor #FEFEFE
+skinparam roundcorner 15
+skinparam shadowing false
+
+skinparam package {
+    BackgroundColor<<sdk>> LightBlue
+    BorderColor<<sdk>> DarkBlue
+    BackgroundColor<<miniapp>> LightGreen
+    BorderColor<<miniapp>> DarkGreen
+    BackgroundColor<<5g>> LightYellow
+    BorderColor<<5g>> Orange
+    BackgroundColor<<network>> LightCoral
+    BorderColor<<network>> Red
+}
+
+skinparam component {
+    BackgroundColor<<sdk>> AliceBlue
+    BorderColor<<sdk>> Blue
+    BackgroundColor<<miniapp>> Honeydew
+    BorderColor<<miniapp>> Green
+    BackgroundColor<<5g>> LightYellow
+    BorderColor<<5g>> Orange
+}
+
+' Main actors
+actor "User A\n(Your Phone)" as UserA
+actor "User B\n(Friend's Phone)" as UserB
+
+' Layer 1: Mini App Layer
+package "📱 MINI APP LAYER\n(What Users See & Interact With)" <<miniapp>> {
+    component [Mini App UI\n(HTML5/JavaScript)\n\nExamples:\n- Share menu during call\n- Real-time translation\n- AR filters\n- Game overlay] as MiniApp <<miniapp>>
+
+    note right of MiniApp
+        **Mini Apps are like web pages**
+        that run DURING phone calls.
+
+        They can send data to the
+        other person on the call.
+    end note
+}
+
+' Layer 2: SDK Bridge
+package "🔗 SDK BRIDGE\n(Connects Mini App to Phone's Hardware)" <<sdk>> {
+    component [DSBridge\n\nTranslates JavaScript\ncalls to Android code] as Bridge <<sdk>>
+
+    component [SDK Managers\n\n- DCManager: Creates data channels\n- MiniAppManager: Runs apps\n- CallManager: Monitors call] as Managers <<sdk>>
+}
+
+' Layer 3: Terminal/Modem (5G Hardware)
+package "📡 TERMINAL LAYER\n(Your Phone's 5G Hardware)" <<5g>> {
+    component [Modem/Chipset\n\nThe physical chip that\nconnects to 5G towers.\n\nHandles:\n✓ Voice call\n✓ Video call\n✓ Data channel (NEW!)] as Modem <<5g>>
+
+    note right of Modem
+        **Think of it like this:**
+
+        Old calls = only voice/video
+
+        5G New Calling = voice/video
+        PLUS data channel for apps
+    end note
+}
+
+' Layer 4: Network
+package "☁️ 5G NETWORK\n(The Internet Infrastructure)" <<network>> {
+    cloud "5G Towers &\nIMS Core Network\n\nRoutes your call and\ndata to the other person" as Network <<network>>
+
+    note bottom of Network
+        **IMS (IP Multimedia Subsystem)**
+        is the technology that handles
+        voice/video calls over 5G internet.
+
+        This SDK adds DATA CHANNELS
+        on top of those calls.
+    end note
+}
+
+' Flow arrows with explanations
+
+UserA --> MiniApp : 1. User taps\n"Send Menu"\nbutton
+
+MiniApp --> Bridge : 2. Mini app calls:\n<b>createDataChannel()</b>\n(JavaScript function)
+
+Bridge --> Managers : 3. SDK translates\nto Android code
+
+Managers --> Modem : 4. SDK tells modem:\n"Create a data tunnel\nto the other phone"
+
+Modem --> Network : 5. Modem sends\nrequest through\n5G network
+
+Network --> Modem : 6. Network confirms\ndata channel created
+
+Modem --> Managers : 7. Modem notifies:\n"Channel ready!"
+
+Managers --> MiniApp : 8. SDK tells mini app:\n"You can send data now"
+
+MiniApp --> Bridge : 9. User sends menu:\n<b>sendData(menu_json)</b>
+
+Bridge --> Managers : 10. Forward data
+
+Managers --> Modem : 11. Send through\ndata channel
+
+Modem --> Network : 12. Transmit over 5G
+
+Network --> UserB : 13. Delivered to\nfriend's phone
+
+' Key concepts box
+legend bottom
+    |= Concept |= Simple Explanation |
+    | **Mini App** | Web app (HTML/JS) that runs during a call. Like a browser tab, but for calls. |
+    | **SDK (This Project)** | The software that lets mini apps talk to 5G hardware. Like a translator. |
+    | **Data Channel** | A "tunnel" for sending data during a call (separate from voice/video). |
+    | **Terminal/Modem** | The 5G chip in your phone. It talks to cell towers. |
+    | **IMS Network** | Internet-based phone system. Handles calls over 5G data (not old cellular). |
+    | **AIDL** | Android Interface Definition Language - how SDK talks to modem chip. |
+end legend
+
+' Additional explanation box
+note as N1
+<b><size:14>🎯 THE BIG PICTURE</size></b>
+
+<b>Problem this SDK solves:</b>
+During a regular phone call, you can only send voice/video.
+What if you want to send OTHER data? (menu, game moves, AR data, etc.)
+
+<b>Solution:</b>
+1. Your phone is on a 5G call (voice + video flowing)
+2. SDK creates a DATA CHANNEL (separate pipe for app data)
+3. Mini app can now send JSON, files, game data, etc.
+4. All happening DURING THE SAME CALL!
+
+<b>Real-world example:</b>
+• You call a restaurant
+• During the call, a menu mini-app opens
+• You tap items on the menu
+• The data (your order) sends through DATA CHANNEL
+• Restaurant sees your order in real-time
+• You confirm verbally via VOICE CHANNEL
+• All in one call!
+end note
+
+@enduml

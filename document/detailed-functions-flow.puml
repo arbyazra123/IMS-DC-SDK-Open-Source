@@ -1,0 +1,330 @@
+@startuml Detailed Functions Flow - Data Channel Creation
+
+title IMS-DC-SDK: Complete Function Call Flow with File Paths\n(Data Channel Creation Example)
+
+skinparam sequenceMessageAlign center
+skinparam BoxPadding 10
+skinparam ParticipantPadding 20
+skinparam SequenceBoxBorderColor #888888
+
+actor "User" as User
+participant "Mini App\n(Vue.js)" as MiniApp
+participant "DSBridge" as DSBridge
+box "JavaScript API Layer" #LightBlue
+    participant "JSApi" as JSApi
+    participant "JsEventDispatcherFactory" as Factory
+    participant "DCJsEventDispatcher" as DCDispatcher
+end box
+box "Use Case Layer" #LightGreen
+    participant "DCMiniUseCase" as DCUseCase
+end box
+box "Manager Layer" #LightYellow
+    participant "MiniAppManager" as AppMgr
+    participant "DCManager" as DCMgr
+end box
+box "Service Layer" #LightCoral
+    participant "DCServiceManager" as DCService
+end box
+box "Terminal AIDL Layer" #LightGray
+    participant "IImsDataChannel" as AIDL
+    participant "IImsDataChannelCallback" as Callback
+end box
+participant "5G Modem" as Modem
+
+autonumber "<b>STEP 0:"
+
+== Phase 1: User Action & JavaScript Call ==
+
+User -> MiniApp : Click "Create DC" button
+note right
+  **File:** miniapp/demo/IMS_DC_Mini_app_demo_source_code/src/pages/main.vue
+  **Line:** ~200-300
+end note
+
+MiniApp -> DSBridge : dsbridge.call('async', {\n  event: 'dc',\n  function: 'createAppDataChannel',\n  params: {...}\n}, callback)
+note right
+  **JavaScript Code:**
+  event: 'dc'
+  function: 'createAppDataChannel'
+  params: {
+    dcLabels: ["local_333_1_test"],
+    DataChannelAppInfoXml: "<DataChannelAppInfo>..."
+  }
+end note
+
+== Phase 2: Bridge to Native ==
+
+DSBridge -> JSApi : async(msg, handler)
+note right
+  **File:** core/src/main/java/com/ct/ertclib/dc/core/miniapp/bridge/JSApi.kt
+  **Function:** fun async(msg: Any, handler: CompletionHandler<String?>)
+  **Line:** 48
+
+  Parses JSON to JSRequest object
+end note
+
+== Phase 3: Event Routing ==
+
+JSApi -> Factory : getEventDispatcher(event = 'dc')
+note right
+  **File:** core/src/main/java/com/ct/ertclib/dc/core/factory/JsEventDispatcherFactory.kt
+  **Function:** fun getEventDispatcher(event: String)
+
+  Routes based on event type
+end note
+
+Factory --> JSApi : Returns DCJsEventDispatcher
+note right
+  **File:** core/src/main/java/com/ct/ertclib/dc/core/dispatcher/js/DCJsEventDispatcher.kt
+end note
+
+JSApi -> DCDispatcher : dispatchAsyncMessage(context, request, handler)
+note right
+  **File:** DCJsEventDispatcher.kt
+  **Function:** override fun dispatchAsyncMessage(...)
+  **Line:** 36
+
+  Routes to specific function based on request.function
+end note
+
+== Phase 4: Use Case Processing ==
+
+DCDispatcher -> DCUseCase : createAppDataChannel(context, params, handler)
+note right
+  **File:** core/src/main/java/com/ct/ertclib/dc/core/usecase/miniapp/DCMiniUseCase.kt
+  **Function:** override fun createAppDataChannel(...)
+  **Line:** 52
+
+  **Validations:**
+  1. Check dcLabels not null
+  2. Check DataChannelAppInfoXml not null
+  3. Verify appId in dcLabel matches mini app
+  4. Ensure dcLabel not already created
+  5. Insert StreamId if missing
+end note
+
+DCUseCase -> DCUseCase : Validate Parameters
+note right
+  **Validation Code (Lines 58-80):**
+  - params["dcLabels"] exists?
+  - params["DataChannelAppInfoXml"] exists?
+  - dcLabel contains correct appId?
+  - dcLabel not in createDCLabelList?
+end note
+
+DCUseCase -> DCUseCase : Launch Coroutine (IO Dispatcher)
+note right
+  **Line:** 81-92
+  scope.launch {
+    withContext(Dispatchers.IO) {
+      // Insert StreamId if missing
+      // Call miniToParentManager.createDC()
+    }
+  }
+end note
+
+== Phase 5: Manager Processing ==
+
+DCUseCase -> AppMgr : createDC(dcLabels, description)
+note right
+  **File:** core/src/main/java/com/ct/ertclib/dc/core/miniapp/MiniAppManager.kt
+  **Interface Method:** IMiniToParentManager.createDC()
+  **Actual Function:** createApplicationDataChannelsInternal(...)
+  **Line:** 817
+end note
+
+AppMgr -> DCMgr : createApplicationDataChannels(\n  dcLabels, description,\n  slotId, callId, remoteNumber)
+note right
+  **File:** core/src/main/java/com/ct/ertclib/dc/core/manager/call/DCManager.kt
+  **Function:** fun createApplicationDataChannels(...)
+  **Line:** 328
+
+  Adds CreateAdcParams to createAdcQueue
+end note
+
+== Phase 6: Queue Processing ==
+
+DCMgr -> DCMgr : Add to createAdcQueue
+note right
+  **Line:** ~340
+  createAdcQueue.offer(CreateAdcParams(...))
+
+  **Queue Type:** ArrayBlockingQueue<CreateAdcParams>
+  **Capacity:** 100
+end note
+
+DCMgr -> DCMgr : startCreateADCQueue() [Background Coroutine]
+note right
+  **Background Processing:**
+  Coroutine polls queue and processes requests
+  with 3-second delays between batches
+end note
+
+DCMgr -> DCMgr : Check mAdcMap cache
+note right
+  **Cache Key:** telecomCallId + dcLabel
+
+  If DC exists and state is OPEN/CONNECTING:
+    → Return cached DC
+  Else:
+    → Proceed to create new DC
+end note
+
+== Phase 7: AIDL Call to Terminal ==
+
+DCMgr -> DCService : createImsDc(\n  labels, description,\n  slotId, callId, remoteNumber)
+note right
+  **File:** core/src/main/java/com/ct/ertclib/dc/core/manager/service/DCServiceManager.kt
+  **Function:** fun createImsDc(...)
+
+  Wraps AIDL interface call
+end note
+
+DCService -> AIDL : IImsDataChannelServiceController\n.createApplicationDataChannel(\n  labels, description)
+note right
+  **AIDL Interface:**
+  com.newcalllib.datachannel.V1_0.IImsDataChannel
+
+  Calls into terminal's modem chip implementation
+end note
+
+== Phase 8: Modem Processing ==
+
+AIDL -> Modem : Create Data Channels
+note right
+  **Modem Operations:**
+  1. Parse DataChannelAppInfoXml
+  2. Extract DC parameters (StreamId, Direction, Priority, etc.)
+  3. Negotiate with 5G network via SIP
+  4. Establish WebRTC data channels
+end note
+
+Modem -> Modem : Negotiate with 5G Network
+note right
+  **Network Protocol:**
+  - SIP INVITE/UPDATE messages
+  - SDP negotiation
+  - WebRTC data channel establishment
+end note
+
+== Phase 9: Callback from Modem ==
+
+Modem -> Callback : onApplicationDataChannelResponse(\n  IImsDataChannel dc)
+note right
+  **AIDL Callback Interface:**
+  IImsDataChannelCallback.onApplicationDataChannelResponse()
+
+  **DC Object Contains:**
+  - dcLabel: String
+  - streamId: String
+  - state: ImsDCStatus (OPEN/CONNECTING/CLOSED)
+  - send(data, size, callback): method
+  - close(): method
+  - bufferedAmount(): method
+end note
+
+Callback -> DCMgr : ImsDcCallback.onApplicationDataChannelResponse(dc)
+note right
+  **File:** DCManager.kt
+  **Inner Class:** ImsDcCallback implements IImsDataChannelCallback
+  **Function:** override fun onApplicationDataChannelResponse(dc)
+  **Line:** 217
+end note
+
+== Phase 10: DC Caching & Routing ==
+
+DCMgr -> DCMgr : Cache DC in mAdcMap
+note right
+  **Caching Logic (Lines 220-280):**
+
+  val adcKey = getAdcKey(telecomCallId, dcLabel)
+  mAdcMap[adcKey] = dc
+
+  Extract appId from dcLabel:
+  Format: "local_[appId]_[index]_[label]"
+  Example: "local_333_1_test" → appId = "333"
+end note
+
+DCMgr -> DCMgr : Determine DC Type
+note right
+  **DC Type Routing:**
+
+  1. Own ADC (SDK internal use)
+     → Contains "_own_"
+
+  2. Control ADC (borrowed channel)
+     → Contains "_control_"
+
+  3. Regular ADC (for mini app)
+     → Normal dcLabel format
+end note
+
+DCMgr -> AppMgr : onDataChannelCreated(\n  callId, streamId, dc)
+note right
+  **Listener Interface:** IDcCreateListener
+  **Function:** onDataChannelCreated()
+
+  Routes to MiniAppManager which registered as listener
+end note
+
+== Phase 11: Mini App Notification ==
+
+AppMgr -> AppMgr : Store DC reference in openDCList
+note right
+  **File:** MiniAppManager.kt
+  **Listener:** Implements IDcCreateListener
+  **Function:** onDataChannelCreated() implementation
+
+  Stores DC for mini app to use
+end note
+
+AppMgr -> DCUseCase : Callback via handler.complete()
+note right
+  Returns to DCMiniUseCase coroutine context
+end note
+
+== Phase 12: Response to JavaScript ==
+
+DCUseCase -> DCUseCase : Build JSResponse
+note right
+  **File:** DCMiniUseCase.kt
+  **Line:** 89
+
+  val response = JSResponse(
+    code = "0",
+    msg = result.toString(),
+    data = ""
+  )
+end note
+
+DCUseCase -> DCDispatcher : handler.complete(JsonUtil.toJson(response))
+note right
+  CompletionHandler sends response back through DSBridge
+end note
+
+DCDispatcher --> JSApi : Response
+JSApi --> DSBridge : Response
+DSBridge -> MiniApp : callback(response)
+note right
+  **JavaScript Callback Receives:**
+  {
+    "code": "0",
+    "msg": "dc1",
+    "data": ""
+  }
+end note
+
+== Phase 13: Ready for Use ==
+
+MiniApp -> MiniApp : Update UI: "DC Created"
+note right
+  **Mini App Can Now:**
+  - sendData(dcLabel, base64Data)
+  - closeAppDataChannel(dcLabel)
+  - getBufferedAmount(dcLabel)
+  - Listen for onReceive events
+end note
+
+MiniApp -> User : Display success message
+
+@enduml

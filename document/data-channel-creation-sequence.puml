@@ -1,0 +1,217 @@
+@startuml Data Channel Creation Sequence
+
+title Data Channel Creation - Detailed Sequence Flow
+
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 200
+
+actor "User" as User
+participant "Mini App\n(Vue.js)" as MiniApp
+participant "DSBridge" as DSBridge
+participant "JSApi" as JSApi
+participant "JsEventDispatcherFactory" as Factory
+participant "DCJsEventDispatcher" as DCDispatcher
+participant "DCMiniUseCase" as DCUseCase
+participant "MiniAppManager" as AppMgr
+participant "DCManager" as DCMgr
+participant "DCServiceManager" as DCService
+participant "Terminal AIDL\n(IImsDataChannel)" as AIDL
+participant "5G Modem" as Modem
+participant "IMS Network" as Network
+participant "Remote Party" as Remote
+
+== Phase 1: User Interaction ==
+
+User -> MiniApp : Click "Create Data Channel"
+activate MiniApp
+
+MiniApp -> MiniApp : Prepare DC Parameters\n(dcLabels, DataChannelAppInfoXml)
+
+note right of MiniApp
+  dcLabels format:
+  "local_[appId]_[index]_[label]"
+  Example: "local_333_1_test"
+
+  DataChannelAppInfoXml contains:
+  - StreamId
+  - Direction (sendrecv/sendonly/recvonly)
+  - Priority
+  - MaxBitrate
+  - Other DC parameters
+end note
+
+== Phase 2: JavaScript to Native Bridge ==
+
+MiniApp -> DSBridge : dsbridge.call('async', {\n  event: 'dc',\n  function: 'createAppDataChannel',\n  params: {...}\n}, callback)
+activate DSBridge
+
+DSBridge -> JSApi : async(msg, handler)
+activate JSApi
+
+JSApi -> JSApi : Parse JSON to JSRequest\nevent='dc'\nfunction='createAppDataChannel'\nparams={dcLabels, DataChannelAppInfoXml}
+
+== Phase 3: Event Routing ==
+
+JSApi -> Factory : getEventDispatcher('dc')
+activate Factory
+
+Factory -> Factory : Create/Get DCJsEventDispatcher
+Factory --> JSApi : DCJsEventDispatcher instance
+deactivate Factory
+
+JSApi -> DCDispatcher : dispatchAsyncMessage(request, handler)
+activate DCDispatcher
+
+DCDispatcher -> DCDispatcher : Route to createAppDataChannel()
+
+== Phase 4: Validation & Processing ==
+
+DCDispatcher -> DCUseCase : createAppDataChannel(request, handler)
+activate DCUseCase
+
+DCUseCase -> DCUseCase : Validate Parameters
+note right of DCUseCase
+  Validation checks:
+  1. dcLabels contain correct appId
+  2. Labels not already created
+  3. DataChannelAppInfoXml valid XML
+  4. Insert StreamId if missing
+end note
+
+DCUseCase -> DCUseCase : Parse DataChannelAppInfoXml
+
+DCUseCase -> AppMgr : createDC(dcLabels, description)
+activate AppMgr
+
+== Phase 5: DC Manager Processing ==
+
+AppMgr -> DCMgr : createApplicationDataChannels(\n  dcLabels, description, slotId,\n  callId, remoteNumber)
+activate DCMgr
+
+DCMgr -> DCMgr : Create CreateAdcParams object
+DCMgr -> DCMgr : Add to createAdcQueue
+
+note right of DCMgr
+  Queue contains:
+  - slotId
+  - callId
+  - remoteNumber
+  - dcLabels (array)
+  - description (XML string)
+  - listener callback
+end note
+
+== Phase 6: Queue Processing (Background Coroutine) ==
+
+DCMgr -> DCMgr : startCreateADCQueue()\n[Background Coroutine]
+
+loop For each queued request
+    DCMgr -> DCMgr : Poll createAdcQueue
+    DCMgr -> DCMgr : Check mAdcMap cache
+
+    alt DC exists in cache (OPEN/CONNECTING)
+        DCMgr -> AppMgr : onDataChannelCreated()\n[Cached DC]
+        note right of DCMgr
+          Reuse existing DC
+          if still OPEN or CONNECTING
+        end note
+    else DC not cached or CLOSED
+        DCMgr -> DCMgr : Prepare new DC creation
+        DCMgr -> DCMgr : Delay 3 seconds\n(rate limiting)
+
+        == Phase 7: AIDL Call to Terminal ==
+
+        DCMgr -> DCService : createImsDc(\n  labels, description,\n  slotId, callId, remoteNumber)
+        activate DCService
+
+        DCService -> AIDL : IImsDataChannelServiceController\n.createApplicationDataChannel(\n  labels, description)
+        activate AIDL
+
+        == Phase 8: Modem Processing ==
+
+        AIDL -> Modem : Create Data Channels
+        activate Modem
+
+        Modem -> Modem : Parse DataChannelAppInfoXml
+        Modem -> Modem : Validate parameters
+
+        Modem -> Network : SIP INVITE/UPDATE\n(DC negotiation via SDP)
+        activate Network
+
+        Network -> Remote : Negotiate DC creation
+        activate Remote
+
+        Remote --> Network : Accept/Reject DC
+        deactivate Remote
+
+        Network --> Modem : DC Creation Response
+        deactivate Network
+
+        Modem -> Modem : Establish WebRTC\nData Channel
+
+        == Phase 9: Callback from Modem ==
+
+        Modem -> AIDL : onApplicationDataChannelResponse(\n  IImsDataChannel dc)
+        deactivate Modem
+
+        note right of AIDL
+          DC object contains:
+          - dcLabel
+          - streamId
+          - state (OPEN/CONNECTING/CLOSED)
+          - send() method
+          - close() method
+        end note
+
+        AIDL -> DCMgr : ImsDcCallback\n.onApplicationDataChannelResponse(dc)
+        deactivate AIDL
+        deactivate DCService
+
+        == Phase 10: DC Caching & Routing ==
+
+        DCMgr -> DCMgr : Cache DC in mAdcMap\nkey = callId + dcLabel
+
+        DCMgr -> DCMgr : Extract appId from dcLabel
+
+        DCMgr -> DCMgr : Determine DC type\n(Own ADC / Control ADC / Regular ADC)
+
+        DCMgr -> AppMgr : onDataChannelCreated(\n  callId, streamId, dc)
+        deactivate DCMgr
+
+        == Phase 11: Mini App Notification ==
+
+        AppMgr -> AppMgr : Store DC reference
+        deactivate AppMgr
+
+    end
+end
+
+== Phase 12: Response to JavaScript ==
+
+DCUseCase -> DCUseCase : Build JSResponse\n{code: "0", msg: "dc1", data: ""}
+DCUseCase -> DCDispatcher : handler.complete(response)
+deactivate DCUseCase
+
+DCDispatcher --> JSApi : Response
+deactivate DCDispatcher
+
+JSApi --> DSBridge : Response
+deactivate JSApi
+
+DSBridge -> MiniApp : callback(response)
+deactivate DSBridge
+
+== Phase 13: DC Ready for Use ==
+
+MiniApp -> MiniApp : Update UI\n"DC Created Successfully"
+MiniApp -> User : Display success message
+deactivate MiniApp
+
+note over MiniApp
+  Mini App can now:
+  - sendData(dcId, data)
+  - Register onReceive listener
+  - closeAppDataChannel(dcId)
+end note
+
+@enduml

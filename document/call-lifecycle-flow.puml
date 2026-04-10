@@ -1,0 +1,321 @@
+@startuml Call Lifecycle Flow
+
+title IMS-DC-SDK Call Lifecycle Flow
+
+skinparam activityBackgroundColor #LightBlue
+skinparam activityBorderColor #Blue
+skinparam activityDiamondBackgroundColor #LightYellow
+skinparam activityDiamondBorderColor #Orange
+
+|Android Framework|
+start
+:User initiates or\nreceives phone call;
+
+:Telecom Framework\nactivates InCallService;
+
+|SDK Service Layer|
+:InCallServiceImpl.onBind();
+
+note right
+  - Update log configuration
+  - Check/update privacy version
+  - Clean expired mini app data
+end note
+
+:Wait for call events...;
+
+|#LightGreen|Call Added Event|
+:onCallAdded(call);
+
+:Extract call information:
+- Telecom Call ID
+- Slot ID
+- Remote Number
+- Video State
+- Call State;
+
+if (First call?) then (yes)
+  :Initialize all managers;
+
+  |Core Managers|
+  fork
+    :Initialize DCManager;
+    note right
+      - Bind to DCServiceManager
+      - Register DC callbacks
+      - Start ADC queue processor
+    end note
+  fork again
+    :Initialize NewCallsManager;
+    note right
+      - Monitor call state changes
+      - Track active calls
+    end note
+  fork again
+    :Initialize MiniAppManager;
+    note right
+      - Prepare mini app container
+      - Load app catalog from network
+      - Register as DC listener
+    end note
+  fork again
+    :Initialize ExpandingCapacityManager;
+    note right
+      - Load OEM EC provider
+      - Load operator EC providers
+      - Register EC callbacks
+    end note
+  end fork
+
+  |SDK Service Layer|
+else (no)
+  :Use existing managers;
+endif
+
+:Create CallInfo object;
+
+:Notify all managers\nabout new call;
+
+|Call Manager|
+:NewCallsManager receives\ncall added event;
+
+:Update call state map;
+
+:Notify listeners;
+
+|DC Manager|
+:DCManager receives\ncall state change;
+
+if (Remote supports DC?) then (yes)
+  :Prepare for DC operations;
+else (no)
+  :Skip DC initialization;
+endif
+
+|Mini App Manager|
+:MiniAppManager receives\ncall added event;
+
+:Load mini app list;
+
+if (App list cached?) then (yes)
+  :Use cached list;
+else (no)
+  :Download from server;
+  :Parse properties.json\nfor each app;
+  :Cache app list;
+endif
+
+:Filter apps based on:
+- Call phase (pre-call/in-call)
+- Call type (audio/video)
+- DC support required;
+
+if (Auto-load apps exist?) then (yes)
+  fork
+    :Auto-start app 1;
+  fork again
+    :Auto-start app 2;
+  fork again
+    :Auto-start app N;
+  end fork
+
+  :Launch MiniAppActivity;
+  :Load HTML in WebView;
+  :Inject DSBridge;
+  :Initialize JSApi;
+else (no)
+  :Wait for user action;
+endif
+
+|User Interface|
+:Display floating ball\nentry button on call screen;
+
+if (User taps mini app?) then (yes)
+  |Mini App Manager|
+  :Start requested mini app;
+
+  if (App downloaded?) then (yes)
+    :Extract app package;
+  else (no)
+    :Download app ZIP;
+    :Extract to private storage;
+  endif
+
+  :Find available process slot\n(MiniAppActivity 0-9);
+
+  :Launch MiniAppActivity\nin separate process;
+
+  :Load app HTML in WebView;
+
+  :Inject DSBridge;
+
+  :Register JSApi callbacks;
+
+  |Mini App|
+  :App JavaScript initializes;
+
+  :Register DC listeners;
+
+  :App UI ready for user;
+
+  :User interacts with app;
+
+  repeat
+    :User performs action\n(create DC, send data, etc.);
+
+    :App calls DSBridge API;
+
+    |JavaScript API Layer|
+    :JSApi routes event;
+
+    :Dispatcher processes request;
+
+    :UseCase validates & executes;
+
+    |Core Managers|
+    :Manager handles operation;
+
+    if (Requires AIDL?) then (yes)
+      |Terminal Interface|
+      :Call terminal via AIDL;
+
+      |Modem Layer|
+      :Process request;
+
+      :Interact with network;
+
+      :Return result via callback;
+
+      |Core Managers|
+      :Process callback;
+
+      :Route to appropriate app;
+    else (no)
+      :Process locally;
+    endif
+
+    |Mini App|
+    :Receive response;
+
+    :Update UI;
+
+  repeat while (Call active?) is (yes)
+
+  |#LightCoral|Call End Event|
+else (no)
+  :Continue call without app;
+
+  |#LightCoral|Call End Event|
+endif
+
+|Call Manager|
+:NewCallsManager detects\ncall state = DISCONNECTED;
+
+:Notify all listeners;
+
+|SDK Service Layer|
+:onCallRemoved(call);
+
+|Mini App Manager|
+:Close all mini apps\nfor this call;
+
+fork
+  :Stop MiniAppActivity 1;
+  :Release WebView;
+  :Clear app data;
+fork again
+  :Stop MiniAppActivity 2;
+  :Release WebView;
+  :Clear app data;
+fork again
+  :Stop MiniAppActivity N;
+  :Release WebView;
+  :Clear app data;
+end fork
+
+:Remove app from active list;
+
+|DC Manager|
+:Close all data channels\nfor this call;
+
+:For each ADC in mAdcMap;
+
+repeat
+  :Get DC by key\n(callId + dcLabel);
+
+  if (DC still open?) then (yes)
+    |Terminal Interface|
+    :Call dc.close() via AIDL;
+
+    |Modem Layer|
+    :Close data channel;
+
+    :Notify network;
+  else (no)
+    :Skip already closed;
+  endif
+
+  |DC Manager|
+  :Remove from cache;
+
+repeat while (More DCs?) is (yes)
+
+:Clear createAdcQueue;
+
+|Expanding Capacity Manager|
+:Release all EC resources\nfor this call;
+
+:Notify EC providers;
+
+|SDK Service Layer|
+if (Any other active calls?) then (yes)
+  :Keep service running;
+  :Keep managers initialized;
+
+  :Wait for next event...;
+  stop
+else (no)
+  :Prepare for service shutdown;
+
+  :onUnbind();
+
+  note right
+    - Final cleanup
+    - Release all resources
+    - Unbind AIDL services
+  end note
+
+  |Core Managers|
+  :Destroy all managers;
+
+  fork
+    :DCManager cleanup;
+  fork again
+    :NewCallsManager cleanup;
+  fork again
+    :MiniAppManager cleanup;
+  fork again
+    :ExpandingCapacityManager cleanup;
+  end fork
+
+  |SDK Service Layer|
+  :Service destroyed;
+
+  stop
+endif
+
+legend right
+  |= Phase |= Key Actions |
+  | Service Binding | Initialize SDK, load config |
+  | Call Added | Create managers, load apps |
+  | Active Call | Mini apps running, DC operations |
+  | Call Removed | Cleanup apps, close DCs |
+  | Service Unbind | Release all resources |
+  |= **Key Design Principles** |= |
+  | Lifecycle tied to active calls | State monitoring throughout lifecycle |
+  | Lazy initialization (first call only) | Multi-app support (up to 10 concurrent) |
+  | Automatic cleanup on call end | Separate processes for isolation |
+  | Queue-based DC creation | Resource efficiency |
+endlegend
+
+@enduml

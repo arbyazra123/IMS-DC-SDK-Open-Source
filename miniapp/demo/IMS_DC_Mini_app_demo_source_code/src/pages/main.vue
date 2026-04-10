@@ -1,173 +1,173 @@
 <template>
   <div class="content-wrapper">
-    <div class="my-text">数据通道操作：</div>
-    <button class="my-button" v-on:click="createAppDataChannel">创建application data channel</button>
+    <div class="my-text">Data Channel Operations:</div>
+    <button class="my-button" v-on:click="createAppDataChannel">Create Application Data Channel</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="closeAppDataChannel">关闭application data channel</button>
+    <button class="my-button" v-on:click="closeAppDataChannel">Close Application Data Channel</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="getBufferedAmount">查询bufferedAmount</button>
+    <button class="my-button" v-on:click="getBufferedAmount">Query Buffered Amount</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="sendData(str2ByteArray(`Hello World`))">发送数据</button>
+    <button class="my-button" v-on:click="sendData(str2ByteArray(`Hello World`))">Send Data</button>
     <br>
     <br>
-    <div class="my-text">文件操作：</div>
-    <button class="my-button" v-on:click="getLocation">获取当前位置</button>
+    <div class="my-text">File Operations:</div>
+    <button class="my-button" v-on:click="getLocation">Get Current Location</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="selectAndCopyFile">选择并复制文件到私有目录</button>
+    <button class="my-button" v-on:click="selectAndCopyFile">Select and Copy File to Private Directory</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="selectAndDeleteFile">选择并删除私有目录文件</button>
+    <button class="my-button" v-on:click="selectAndDeleteFile">Select and Delete Private Directory File</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="getFileList">获取文件列表</button>
+    <button class="my-button" v-on:click="getFileList">Get File List</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="getPrivateFolder('inner')">获取私有目录</button>
+    <button class="my-button" v-on:click="getPrivateFolder('inner')">Get Private Directory</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="selectAndDecompressFile">选择并解压文件到私有目录(请用私有目录文件测试)</button>
+    <button class="my-button" v-on:click="selectAndDecompressFile">Select and Decompress File to Private Directory</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="checkFileOrFolderExists">判断文件/文件夹是否存在</button>
+    <button class="my-button" v-on:click="checkFileOrFolderExists">Check If File/Folder Exists</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="saveUpdateKeyValueWithExpiry('','','')">缓存数据带有效期</button>
+    <button class="my-button" v-on:click="saveUpdateKeyValueWithExpiry('','','')">Cache Data with Expiry</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="getKeyValue('')">获取缓存数据</button>
+    <button class="my-button" v-on:click="getKeyValue('')">Get Cached Data</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="quickSearchFile('1749')">本地文件快速搜索</button>
+    <button class="my-button" v-on:click="quickSearchFile('1749')">Quick Local File Search</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="captureImage()">调用摄像头获取视频流</button>
+    <button class="my-button" v-on:click="captureImage()">Access Camera for Video Stream</button>
     <br>
     <br>
-<!--    <button class="my-button" v-on:click="stopCaptureImage()">关闭摄像头</button>-->
+<!--    <button class="my-button" v-on:click="stopCaptureImage()">Close Camera</button>-->
 <!--    <br>-->
 <!--    <br>-->
     <video id="video" width="200" height="200" autoplay style="object-fit:cover;background-color: #181818"></video>
     <br>
     <br>
-    <button class="my-button" v-on:click="playVoice(`${this.appPath}/1.mp3`)">播放mp3</button>
+    <button class="my-button" v-on:click="playVoice(`${this.appPath}/1.mp3`)">Play MP3</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="stopPlayVoice()">停止播放mp3</button>
+    <button class="my-button" v-on:click="stopPlayVoice()">Stop MP3 Playback</button>
     <br>
     <br>
-    <div class="my-text">小程序操作：</div>
-    <button class="my-button" v-on:click="getMiniAppInfo">获取小程序信息</button>
+    <div class="my-text">Mini App Operations:</div>
+    <button class="my-button" v-on:click="getMiniAppInfo">Get Mini App Info</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="setWindow(false,false,'#0000FF',1,'#FF0000','测试小程序')">非全屏</button>
+    <button class="my-button" v-on:click="setWindow(false,false,'#0000FF',1,'#FF0000','Test Mini App')">Non-Fullscreen</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="setWindow(false,true,'#0000FF',1,'#FF0000','测试小程序')">全屏</button>
+    <button class="my-button" v-on:click="setWindow(false,true,'#0000FF',1,'#FF0000','Test Mini App')">Fullscreen</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="answer">接听电话</button>
+    <button class="my-button" v-on:click="answer">Answer Call</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="hangUp">挂断电话</button>
+    <button class="my-button" v-on:click="hangUp">Hang Up</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="getCallState">获取当前通话状态</button>
+    <button class="my-button" v-on:click="getCallState">Get Current Call State</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="getRemoteNumber">获取对端号码</button>
+    <button class="my-button" v-on:click="getRemoteNumber">Get Remote Number</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="getHttpResult">调用http接口</button>
+    <button class="my-button" v-on:click="getHttpResult">Call HTTP API</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="startOthersApp('222')">拉起本端第三方小程序</button>
+    <button class="my-button" v-on:click="startOthersApp('222')">Launch Local Third-Party Mini App</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="requestStartAdverseApp">拉起对端自己的小程序</button>
+    <button class="my-button" v-on:click="requestStartAdverseApp">Launch Remote Mini App</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="stopApp">关闭小程序</button>
+    <button class="my-button" v-on:click="stopApp">Close Mini App</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="openCamera('picture')">拍照</button>
+    <button class="my-button" v-on:click="openCamera('picture')">Take Photo</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="openCamera('video')">录像</button>
+    <button class="my-button" v-on:click="openCamera('video')">Record Video</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="openGaoDeMap">打开高德地图</button>
+    <button class="my-button" v-on:click="openGaoDeMap">Open Amap</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="openBaiduMap">打开百度地图</button>
+    <button class="my-button" v-on:click="openBaiduMap">Open Baidu Map</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="openBrowser">打开浏览器</button>
+    <button class="my-button" v-on:click="openBrowser">Open Browser</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="setSpeakerphone(true)">开启免提</button>
+    <button class="my-button" v-on:click="setSpeakerphone(true)">Enable Speakerphone</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="setSpeakerphone(false)">关闭免提</button>
+    <button class="my-button" v-on:click="setSpeakerphone(false)">Disable Speakerphone</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="isSpeakerphoneOn">免提是否开启</button>
+    <button class="my-button" v-on:click="isSpeakerphoneOn">Is Speakerphone On</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="setMuted(true)">开启静音</button>
+    <button class="my-button" v-on:click="setMuted(true)">Enable Mute</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="setMuted(false)">关闭静音</button>
+    <button class="my-button" v-on:click="setMuted(false)">Disable Mute</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="isMuted">静音是否开启</button>
+    <button class="my-button" v-on:click="isMuted">Is Muted</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="playDtmfTone('1')">播放DTMF</button>
+    <button class="my-button" v-on:click="playDtmfTone('1')">Play DTMF</button>
     <br>
     <br>
-    <div class="my-text">浮窗操作：</div>
-    <button class="my-button" v-on:click="addViews()">浮窗显示html</button>
+    <div class="my-text">Floating Window Operations:</div>
+    <button class="my-button" v-on:click="addViews()">Show HTML in Floating Window</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="removeViews()">删除浮窗</button>
+    <button class="my-button" v-on:click="removeViews()">Remove Floating Window</button>
     <br>
-    <div class="my-text">联系人操作：</div>
-    <button class="my-button" v-on:click="addContact">添加联系人</button>
+    <div class="my-text">Contact Operations:</div>
+    <button class="my-button" v-on:click="addContact">Add Contact</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="editContact">编辑联系人</button>
+    <button class="my-button" v-on:click="editContact">Edit Contact</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="getContactName">获取联系人姓名</button>
+    <button class="my-button" v-on:click="getContactName">Get Contact Name</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="getContactList">获取联系人列表</button>
+    <button class="my-button" v-on:click="getContactList">Get Contact List</button>
     <br>
     <br>
-    <div class="my-text">拓展能力：</div>
-    <button class="my-button" v-on:click="requestECAIDetect()">AI视频检测</button>
+    <div class="my-text">Extended Capabilities:</div>
+    <button class="my-button" v-on:click="requestECAIDetect()">AI Video Detection</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="requestECTranslateLanguageList">实时翻译语言列表</button>
+    <button class="my-button" v-on:click="requestECTranslateLanguageList">Real-time Translation Language List</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="requestECStartTranslate()">开始实时翻译</button>
+    <button class="my-button" v-on:click="requestECStartTranslate()">Start Real-time Translation</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="requestECStopTranslate">停止实时翻译</button>
+    <button class="my-button" v-on:click="requestECStopTranslate">Stop Real-time Translation</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="requestECTranslateVoice">切换实时翻译音频类型</button>
+    <button class="my-button" v-on:click="requestECTranslateVoice">Switch Translation Audio Type</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="openLink">打开百度</button>
+    <button class="my-button" v-on:click="openLink">Open Baidu</button>
     <br>
     <br>
-    <button class="my-button" v-on:click="queryEC">查询拓展能力</button>
+    <button class="my-button" v-on:click="queryEC">Query Extended Capabilities</button>
     <br>
     <br>
     <br>
@@ -211,7 +211,7 @@ export default {
   },
   methods: {
     openLink() {
-      window.open('https://www.baidu.com', '_self');
+      window.open('https://www.google.com', '_self');
     },
     readParams(){
       const queryString = window.location.search; // "?xxx"

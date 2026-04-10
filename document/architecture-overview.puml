@@ -1,0 +1,252 @@
+@startuml IMS-DC-SDK Architecture Overview
+
+title 5G New Calling Terminal SDK - Architecture Overview
+
+skinparam componentStyle rectangle
+skinparam linetype ortho
+
+' Define packages and components
+
+package "Application Layer" {
+    [Mini App Launcher\n(app module)] as Launcher
+
+    package "Mini Applications (HTML5/JS)" {
+        [Demo Mini App\n(Vue.js 3)] as DemoApp
+        [Custom Mini App 1] as App1
+        [Custom Mini App N] as AppN
+    }
+}
+
+package "SDK Core (core module)" {
+
+    package "Service Layer" {
+        [InCallServiceImpl\n(Entry Point)] as InCallService
+    }
+
+    package "Manager Layer" {
+        [NewCallsManager\n(Call State Monitoring)] as CallMgr
+        [DCManager\n(Data Channel Lifecycle)] as DCMgr
+        [MiniAppManager\n(App Lifecycle & UI)] as AppMgr
+        [ExpandingCapacityManager\n(Extended Capabilities)] as ECMgr
+    }
+
+    package "Mini App Container" {
+        [MiniAppActivity 0-9\n(10 Process Slots)] as Activities
+        [WebView\n(HTML5 Runtime)] as WebView
+        [DSBridge\n(JS-Native Bridge)] as DSBridge
+    }
+
+    package "JavaScript API Layer" {
+        [JSApi\n(async/sync methods)] as JSApi
+
+        package "Event Dispatchers" {
+            [DCJsEventDispatcher] as DCDisp
+            [MiniAppJsEventDispatcher] as AppDisp
+            [FileJsEventDispatcher] as FileDisp
+            [ScreenShareJsEventDispatcher] as ScreenDisp
+            [ECJsEventDispatcher] as ECDisp
+            [SystemJsEventDispatcher] as SysDisp
+        }
+
+        package "Use Cases (Business Logic)" {
+            [DCMiniUseCase] as DCUse
+            [MiniAppMiniUseCase] as AppUse
+            [FileMiniUseCase] as FileUse
+            [ScreenShareMiniUseCase] as ScreenUse
+        }
+
+        [JsEventDispatcherFactory\n(Router)] as Factory
+    }
+
+    package "Terminal Interface Layer (AIDL)" {
+        [DCServiceManager] as DCService
+
+        interface "IImsDataChannel\n(DC Operations)" as IDC
+        interface "IImsDataChannelCallback\n(DC State Events)" as IDCCallback
+        interface "IScreenShareHandler\n(Screen Capture)" as IScreen
+        interface "IExpandingCapacity\n(Extended Features)" as IEC
+    }
+}
+
+package "Base Module (AAR)" {
+    package "Data Structures" {
+        [CallInfo] as CallInfo
+        [MiniAppInfo] as AppInfo
+        [BdcInfo] as BdcInfo
+        [AdcInfo] as AdcInfo
+    }
+
+    package "Port Interfaces (IEC)" {
+        interface "IExpandingCapacityPort\n(Extension Contract)" as IECPort
+    }
+}
+
+package "OEM Extended Capabilities (oemec module)" {
+    [OemEC\n(OEM Implementations)] as OemEC
+    [CtEC\n(China Telecom)] as CtEC
+    [CmEC\n(China Mobile)] as CmEC
+    [CuEC\n(China Unicom)] as CuEC
+}
+
+package "Android Framework" {
+    [Telecom Framework\n(Call Management)] as Telecom
+    [InCallService\n(Android API)] as InCallAPI
+}
+
+package "Terminal / Modem Layer" {
+    [IMS Stack\n(3GPP TS.71)] as IMS
+    [WebRTC Data Channel\n(3GPP TS.66)] as WebRTC
+    [5G Modem / Chipset] as Modem
+}
+
+cloud "5G Network\n(IMS Core)" as Network
+
+' Relationships - Vertical Flow
+
+Launcher --> DemoApp : Launch
+Launcher --> App1 : Launch
+Launcher --> AppN : Launch
+
+DemoApp --> Activities : Run in Process
+App1 --> Activities : Run in Process
+AppN --> Activities : Run in Process
+
+Activities --> WebView : Container
+WebView --> DSBridge : Bridge
+
+Telecom --> InCallAPI : System Callbacks
+InCallAPI --> InCallService : onBind/onCallAdded/\nonCallRemoved
+
+InCallService --> CallMgr : Initialize
+InCallService --> DCMgr : Initialize
+InCallService --> AppMgr : Initialize
+InCallService --> ECMgr : Initialize
+
+CallMgr --> InCallService : Call State Events
+DCMgr --> AppMgr : DC Created Events
+AppMgr --> Activities : Start/Stop Apps
+
+DSBridge --> JSApi : API Calls
+JSApi --> Factory : Route Events
+Factory --> DCDisp : 'dc' events
+Factory --> AppDisp : 'miniapp' events
+Factory --> FileDisp : 'file' events
+Factory --> ScreenDisp : 'screen' events
+Factory --> ECDisp : 'ec' events
+Factory --> SysDisp : 'system' events
+
+DCDisp --> DCUse : Business Logic
+AppDisp --> AppUse : Business Logic
+FileDisp --> FileUse : Business Logic
+ScreenDisp --> ScreenUse : Business Logic
+
+DCUse --> AppMgr : Delegate
+DCUse --> DCMgr : Delegate
+AppUse --> AppMgr : Delegate
+FileUse --> AppMgr : Delegate
+
+DCMgr --> DCService : AIDL Calls
+DCService --> IDC : Create/Send/Close
+IDC --> IMS : Terminal API
+IMS --> WebRTC : DC Protocol
+WebRTC --> Modem : Modem API
+Modem --> Network : 5G NR/IMS
+
+IDCCallback --> DCMgr : Callbacks
+IScreen --> AppMgr : Screen Events
+IEC --> ECMgr : EC Responses
+
+ECMgr --> OemEC : Load Provider
+ECMgr --> CtEC : Load Provider
+ECMgr --> CmEC : Load Provider
+ECMgr --> CuEC : Load Provider
+
+OemEC ..|> IECPort : Implements
+CtEC ..|> IECPort : Implements
+CmEC ..|> IECPort : Implements
+CuEC ..|> IECPort : Implements
+
+CallMgr ..> CallInfo : Uses
+AppMgr ..> AppInfo : Uses
+DCMgr ..> BdcInfo : Uses
+DCMgr ..> AdcInfo : Uses
+
+' Key Notes
+
+note right of InCallService
+  **SDK Entry Point**
+  - Lifecycle tied to active calls
+  - Initializes managers on first call
+  - Cleans up on call end
+  - Permission & license validation
+end note
+
+note right of DCMgr
+  **Data Channel Manager**
+  - Queue-based DC creation
+  - DC caching (mAdcMap)
+  - State monitoring
+  - Listener routing by appId
+  - 3-second delay between batches
+end note
+
+note right of AppMgr
+  **Mini App Manager**
+  - Manages up to 10 concurrent apps
+  - Active/Passive app startup
+  - Auto-load policies (call phase)
+  - WebView lifecycle
+  - File operations
+  - DC callback routing to apps
+end note
+
+note right of Factory
+  **Event Router**
+  Routes JS events by type:
+  - 'dc' → Data Channel ops
+  - 'miniapp' → App control
+  - 'file' → File operations
+  - 'screen' → Screen sharing
+  - 'ec' → Extended capabilities
+  - 'system' → System info
+end note
+
+note right of ECMgr
+  **Capability Extension System**
+  - Loads multiple providers
+  - OEM customizations
+  - Operator-specific features
+  - AI, translation, AR, etc.
+  - Broadcast or targeted callbacks
+end note
+
+note bottom of IMS
+  **3GPP Standards**
+  - TS.71: IMS Data Channel
+  - TS.66: WebRTC-based DC
+  - 5G New Calling specifications
+  - GSMA compliance
+end note
+
+note top of Activities
+  **Multi-Process Design**
+  Each mini app runs in
+  isolated process for:
+  - Stability
+  - Security
+  - Resource management
+  Max 10 concurrent apps
+end note
+
+legend right
+  |= Layer |= Purpose |
+  | Application | User interface & mini apps |
+  | SDK Core | Main SDK logic & API |
+  | Base | Shared data structures |
+  | OEM EC | Extensibility for vendors |
+  | Framework | Android system services |
+  | Terminal | Modem/chipset implementation |
+  | Network | 5G IMS infrastructure |
+endlegend
+
+@enduml

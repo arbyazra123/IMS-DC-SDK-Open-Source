@@ -1,0 +1,244 @@
+@startuml 5G Concepts Explained
+
+title Understanding 5G Data Channels - Simple Analogy
+
+skinparam backgroundColor #FFFFFF
+skinparam roundcorner 10
+
+' Analogy: Highway System
+rectangle "🏙️ <b>ANALOGY: Think of a Phone Call as a HIGHWAY</b>" {
+
+    package "OLD PHONE CALLS (3G/4G)" #LightPink {
+        rectangle "Single Highway" #FFE4E1 {
+            agent "🚗 Voice Lane" as OldVoice
+            agent "🚙 Video Lane\n(if supported)" as OldVideo
+        }
+
+        note bottom of OldVoice
+            Only voice and video.
+            Can't send other data.
+        end note
+    }
+
+    package "NEW 5G CALLS (What This SDK Enables)" #LightGreen {
+        rectangle "Multi-Lane Highway" #E8F5E9 {
+            agent "🚗 Voice Lane" as NewVoice
+            agent "🚙 Video Lane" as NewVideo
+            agent "🚚 **DATA CHANNEL Lane**\n(NEW!)" as DataLane #90EE90
+        }
+
+        note bottom of DataLane
+            NEW: Dedicated lane for
+            app data (menus, games,
+            files, AR data, etc.)
+        end note
+    }
+
+    OldVoice -[hidden]down-> NewVoice
+}
+
+' The Real System
+rectangle "📱 <b>HOW IT ACTUALLY WORKS IN YOUR PHONE</b>" {
+
+    package "YOUR PHONE (Android Device)" #AliceBlue {
+
+        card "APP LEVEL\n(What you code)" #E3F2FD {
+            component [Your Mini App\n(JavaScript/HTML)] as App1
+            note right of App1
+                You write: Vue.js, React, etc.
+                Just like a website!
+            end note
+        }
+
+        card "SDK LEVEL\n(This project)" #B3E5FC {
+            component [IMS-DC-SDK\n(Android library)] as SDK1
+            note right of SDK1
+                Handles the complex stuff:
+                - Creating data channels
+                - Managing lifecycle
+                - Bridging JS ↔ Android
+            end note
+        }
+
+        card "HARDWARE LEVEL\n(Built into phone)" #81D4FA {
+            component [5G Modem Chip\n(Qualcomm/MediaTek/etc.)] as Modem1
+            note right of Modem1
+                Physical chip that:
+                - Connects to 5G towers
+                - Manages radio signals
+                - Implements IMS protocol
+            end note
+        }
+    }
+
+    package "THE NETWORK (Infrastructure)" #FFF9C4 {
+
+        cloud "5G CELL TOWER" as Tower #FFEB3B
+
+        cloud "IMS CORE\n(Telecom Company's Servers)" as IMS #FDD835 {
+            component [Call Session Control] as Session
+            component [Media Gateway] as Media
+            component [Data Router] as DataRouter
+        }
+
+        note right of IMS
+            **IMS = IP Multimedia Subsystem**
+
+            Think of it as Zoom/Skype,
+            but built into the 5G network
+            by China Telecom/Mobile/Unicom.
+
+            It handles calls over INTERNET
+            instead of old cellular networks.
+        end note
+    }
+
+    package "FRIEND'S PHONE" #E1BEE7 {
+        component [Their 5G Modem] as Modem2
+        component [Their SDK] as SDK2
+        component [Their Mini App] as App2
+    }
+}
+
+' Flow connections
+App1 -down-> SDK1 : <b>1.</b> JavaScript API call
+SDK1 -down-> Modem1 : <b>2.</b> AIDL command\n(Android interface)
+Modem1 -down-> Tower : <b>3.</b> 5G radio signal
+Tower -down-> IMS : <b>4.</b> Internet packets
+IMS -down-> Session : <b>5.</b> Route call
+Session -down-> DataRouter : <b>6.</b> Route data
+DataRouter -down-> Modem2 : <b>7.</b> Send to other phone
+Modem2 -down-> SDK2 : <b>8.</b> Deliver data
+SDK2 -down-> App2 : <b>9.</b> Notify mini app
+
+' Key terms explanation
+rectangle "📚 <b>KEY TERMS DECODED</b>" #E8EAF6 {
+
+    card "Terminal" #C5CAE9 {
+        note as TerminalNote
+            **Terminal = Your Phone's Hardware**
+
+            In telecom language, "terminal"
+            means the end device (your phone).
+
+            <b>Terminal includes:</b>
+            • Android OS
+            • 5G Modem chip
+            • IMS client software
+
+            <b>Why we need AIDL:</b>
+            The modem chip is separate from
+            Android, so we use AIDL (Android
+            Interface) to talk to it.
+        end note
+    }
+
+    card "IMS (IP Multimedia Subsystem)" #9FA8DA {
+        note as IMSNote
+            **IMS = Modern Phone Call System**
+
+            Old way: Calls use cellular network
+            New way: Calls use 5G internet (IP)
+
+            <b>Benefits:</b>
+            • Better quality
+            • Can add data channels
+            • Can integrate with apps
+            • Cheaper for operators
+
+            <b>Standards:</b>
+            • 3GPP TS.71 (Data Channel spec)
+            • 3GPP TS.66 (WebRTC integration)
+        end note
+    }
+
+    card "Data Channel" #7986CB {
+        note as DCNote
+            **Data Channel = Data Pipe**
+
+            During a call, you have:
+            • Audio stream (voice)
+            • Video stream (camera)
+            • **Data stream (NEW!)**
+
+            <b>Uses:</b>
+            • Send menu selections
+            • Share screen
+            • Play games together
+            • AR/VR data
+            • File transfer
+            • Real-time translation
+
+            <b>Technology:</b>
+            Uses WebRTC (same as
+            Google Meet, Zoom)
+        end note
+    }
+
+    card "Modem/Chipset" #5C6BC0 {
+        note as ModemNote
+            **Modem = 5G Radio Chip**
+
+            Made by companies like:
+            • Qualcomm (Snapdragon)
+            • MediaTek (Dimensity)
+            • Samsung (Exynos)
+            • HiSilicon (Kirin)
+
+            <b>What it does:</b>
+            1. Converts digital data → radio waves
+            2. Sends to cell tower
+            3. Receives from cell tower
+            4. Converts radio waves → digital data
+
+            <b>Why SDK needs it:</b>
+            To create data channels, SDK
+            must command the modem chip.
+        end note
+    }
+}
+
+' Summary flow
+note as FlowTitle
+<b><size:16>🎯 COMPLETE FLOW SUMMARY</size></b>
+end note
+
+[Start] as S0 #C8E6C9
+[1. Mini app calls\nJavaScript API] as S1 #C8E6C9
+[2. SDK processes\nrequest] as S2 #C8E6C9
+[3. Modem creates\ndata channel] as S3 #C8E6C9
+[4. Cell tower forwards\nto IMS network] as S4 #C8E6C9
+[5. Data channel\nestablished!] as S5 #C8E6C9
+[6. Both phones can\nsend/receive data] as S6 #C8E6C9
+[End] as S7 #C8E6C9
+
+S0 --> S1 : User taps button
+S1 --> S2 : DSBridge translates
+S2 --> S3 : SDK commands modem\nvia AIDL
+S3 --> S4 : Modem sends request\nto cell tower
+S4 --> S5 : IMS negotiates with\nother phone
+S5 --> S6 : Ready to use!
+S6 --> S7
+
+note bottom of S3
+    <b>AIDL (Android Interface Definition Language)</b>
+    is like a translator between Android apps
+    and low-level hardware/services.
+
+    The modem chip isn't part of Android,
+    so we use AIDL to talk to it.
+end note
+
+legend bottom
+    |= Layer |= What It Is |= Your Control |
+    | **Mini App** | Your HTML/JS code | ✅ You write this |
+    | **SDK** | This project (IMS-DC-SDK) | ✅ You use this API |
+    | **Modem** | 5G chip in phone | ❌ Phone manufacturer provides |
+    | **IMS Network** | Telecom infrastructure | ❌ China Telecom/Mobile/Unicom operates |
+    | **AIDL Interface** | Bridge between SDK and modem | ⚠️ SDK handles this for you |
+
+    <b>Bottom line:</b> You only need to understand the Mini App and SDK layers!
+    The SDK handles all the complex 5G/networking/modem stuff for you.
+end legend
+
+@enduml
