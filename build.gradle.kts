@@ -20,8 +20,14 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 buildscript {
     repositories {
-        maven(url = "https://maven.aliyun.com/repository/public")
-        maven(url = "https://maven.aliyun.com/repository/google")
+        maven(url = "https://maven.aliyun.com/repository/public") {
+            // Both aliyun mirrors serve a 502 (not a clean 404) for com.google.devtools.ksp,
+            // which Gradle treats as fatal instead of falling through to the next repository.
+            content { excludeGroup("com.google.devtools.ksp") }
+        }
+        maven(url = "https://maven.aliyun.com/repository/google") {
+            content { excludeGroup("com.google.devtools.ksp") }
+        }
         maven(url = "https://jitpack.io")
         google()
         mavenCentral()

@@ -20,8 +20,15 @@
 pluginManagement {
     includeBuild("build-logic")
     repositories {
-        maven(url = "https://maven.aliyun.com/repository/public")
-        maven(url = "https://maven.aliyun.com/repository/google")
+        maven(url = "https://maven.aliyun.com/repository/public") {
+            // Both aliyun mirrors serve a 502 for com.google.devtools.ksp instead of a
+            // clean "not found", which Gradle treats as fatal rather than falling through
+            // to the next repository - skip them for this group entirely.
+            content { excludeGroup("com.google.devtools.ksp") }
+        }
+        maven(url = "https://maven.aliyun.com/repository/google") {
+            content { excludeGroup("com.google.devtools.ksp") }
+        }
         google()
         mavenCentral()
         gradlePluginPortal()
@@ -29,12 +36,27 @@ pluginManagement {
             dirs("libs")
         }
     }
+    resolutionStrategy {
+        eachPlugin {
+            // Gradle's plugin-marker/Plugin-Portal resolution path fails to find this
+            // artifact in this environment even though it exists on Maven Central -
+            // force it through ordinary module dependency resolution instead, which
+            // works against the same declared repositories.
+            if (requested.id.id == "com.google.devtools.ksp") {
+                useModule("com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin:${requested.version}")
+            }
+        }
+    }
 }
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        maven(url = "https://maven.aliyun.com/repository/public")
-        maven(url = "https://maven.aliyun.com/repository/google")
+        maven(url = "https://maven.aliyun.com/repository/public") {
+            content { excludeGroup("com.google.devtools.ksp") }
+        }
+        maven(url = "https://maven.aliyun.com/repository/google") {
+            content { excludeGroup("com.google.devtools.ksp") }
+        }
         maven(url = "https://jitpack.io")
         google()
         mavenCentral()
