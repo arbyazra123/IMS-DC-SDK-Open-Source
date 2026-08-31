@@ -1,0 +1,239 @@
+<!--
+  ~ Copyright 2025-China Telecom Research Institute.
+  ~ All Rights Reserved.
+  ~
+  ~ SPDX-License-Identifier: Apache-2.0
+  -->
+<!--
+  This mini-app is a control surface only: it lets the caller pick/enable an avatar,
+  it does not receive or render the real call video. Mini-apps have no access to the
+  native InCallService video surface, so the actual face swap must happen natively
+  (e.g. the OEM's video pipeline) once this mini-app's "setAvatarEnable" request reaches it.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AI Avatar</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body, html { width: 100%; height: 100%; background: #101014; overflow: hidden; font-family: sans-serif; }
+    .stage {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(180deg, #1b1e2b 0%, #101014 100%);
+    }
+    .caller-video-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    /* 未开启avatar时，模拟展示对端真实视频画面（此处用纯色块代替） */
+    .real-face {
+      width: 60%;
+      max-width: 260px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: #3a3f55;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 72px;
+      transition: transform 120ms ease;
+    }
+    .real-face[hidden] { display: none; }
+    .avatar-face {
+      width: 60%;
+      max-width: 260px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: #22263a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 96px;
+      transition: transform 120ms ease;
+      box-shadow: 0 0 0 6px rgba(255,255,255,0.06);
+    }
+    .avatar-face[hidden] { display: none; }
+    .avatar-face.mouth-open { transform: scale(1.06); }
+    .status {
+      position: absolute;
+      top: 16px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: #9aa0b4;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+    }
+    .panel {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+      background: rgba(16,16,20,0.85);
+      backdrop-filter: blur(6px);
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #fff;
+      font-size: 15px;
+      margin-bottom: 16px;
+    }
+    .switch {
+      width: 46px;
+      height: 26px;
+      border-radius: 13px;
+      background: #3a3f55;
+      position: relative;
+      cursor: pointer;
+      transition: background 150ms ease;
+    }
+    .switch.on { background: #4c8bf5; }
+    .switch .knob {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #fff;
+      transition: left 150ms ease;
+    }
+    .switch.on .knob { left: 22px; }
+    .avatar-list {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+    .avatar-choice {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: #22263a;
+      color: #fff;
+      font-size: 28px;
+      border: 2px solid transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .avatar-choice.selected { border-color: #4c8bf5; }
+    .sim-label {
+      position: absolute;
+      bottom: 8px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: #565b70;
+      font-size: 10px;
+      padding: 0 24px;
+    }
+  </style>
+</head>
+<body>
+<div class="stage">
+  <div class="status" id="status">connecting to AI avatar capability…</div>
+  <div class="caller-video-placeholder">
+    <div class="sim-label">simulates the native call screen's video area — not rendered by this mini-app</div>
+    <div class="real-face" id="realFace">👤</div>
+    <div class="avatar-face" id="avatarFace" hidden>🐱</div>
+  </div>
+  <div class="panel">
+    <div class="toggle-row">
+      <span>Show avatar instead of caller's face</span>
+      <div class="switch" id="avatarSwitch"><div class="knob"></div></div>
+    </div>
+    <div class="avatar-list" id="avatarList"></div>
+  </div>
+</div>
+
+<script src="./webrtcDC.js"></script>
+<script>
+  // webrtcDC.js只用于获得dsBridge运行时（native<->JS桥接），本小程序不使用其DC/RTCPeerConnection能力
+  var dsBridge = window.dsBridge;
+
+  var AVATAR_EMOJI = { avatar_cat: "🐱", avatar_robot: "🤖", avatar_panda: "🐼" };
+  var avatarEnabled = false;
+  var currentAvatarId = "avatar_cat";
+
+  var statusEl = document.getElementById("status");
+  var realFaceEl = document.getElementById("realFace");
+  var avatarFaceEl = document.getElementById("avatarFace");
+  var switchEl = document.getElementById("avatarSwitch");
+  var listEl = document.getElementById("avatarList");
+
+  function ecRequest(module, func, data) {
+    dsBridge.call("async", {
+      event: "ECEvent",
+      function: "expandingCapacityRequest",
+      params: { provider: "OEM", module: module, func: func, data: data || {} }
+    }, function () {});
+  }
+
+  function renderAvatarChoices(list) {
+    listEl.innerHTML = "";
+    list.forEach(function (avatar) {
+      var btn = document.createElement("div");
+      btn.className = "avatar-choice" + (avatar.id === currentAvatarId ? " selected" : "");
+      btn.textContent = AVATAR_EMOJI[avatar.id] || "🙂";
+      btn.title = avatar.name;
+      btn.addEventListener("click", function () {
+        currentAvatarId = avatar.id;
+        avatarFaceEl.textContent = AVATAR_EMOJI[avatar.id] || "🙂";
+        Array.prototype.forEach.call(listEl.children, function (c) { c.classList.remove("selected"); });
+        btn.classList.add("selected");
+        ecRequest("Avatar", "setAvatar", { avatarId: avatar.id });
+      });
+      listEl.appendChild(btn);
+    });
+  }
+
+  function setAvatarEnabled(enabled) {
+    avatarEnabled = enabled;
+    switchEl.classList.toggle("on", enabled);
+    realFaceEl.hidden = enabled;
+    avatarFaceEl.hidden = !enabled;
+    statusEl.textContent = enabled ? "AI avatar active" : "showing caller's real video";
+    ecRequest("Avatar", "setAvatarEnable", { isEnable: enabled });
+  }
+
+  switchEl.addEventListener("click", function () {
+    setAvatarEnabled(!avatarEnabled);
+  });
+
+  // 接收来自EC能力提供方（当前为本地mock，真实场景为云端AI能力经拓展能力服务转发）的推送
+  dsBridge.register("expandingCapacityNotify", function (content) {
+    try {
+      var payload = JSON.parse(content);
+      if (payload.module === "Avatar" && payload.func === "avatarListCallback") {
+        renderAvatarChoices(payload.data.list);
+      } else if (payload.module === "Avatar" && payload.func === "avatarFrameCallback") {
+        if (!avatarEnabled) return;
+        avatarFaceEl.classList.toggle("mouth-open", !!payload.data.mouthOpen);
+        statusEl.textContent = "AI avatar active · " + payload.data.expression;
+      } else if (payload.module === "Avatar" && payload.func === "setAvatarCallback") {
+        currentAvatarId = payload.data.avatarId;
+      }
+    } catch (e) {}
+  });
+
+  dsBridge.call("async", {
+    event: "ECEvent",
+    function: "expandingCapacityRegister",
+    params: { providerModules: ["OEM-Avatar"] }
+  }, function () {
+    statusEl.textContent = "showing caller's real video";
+    ecRequest("Avatar", "avatarList", {});
+  });
+</script>
+</body>
+</html>

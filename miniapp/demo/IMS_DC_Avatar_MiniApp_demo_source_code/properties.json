@@ -1,0 +1,14 @@
+{
+  "appId": "601",
+  "version": "1.0.0",
+  "permissions": [],
+  "windowStyle": {
+    "isFullScreen": true,
+    "statusBarColor": "#000000",
+    "statusBarTitleColor": 1,
+    "navigationBarColor": "#000000"
+  },
+  "shouldCreateControlADC": false,
+  "shouldStartRemoteApp": false,
+  "canStartedByOthers": true
+}

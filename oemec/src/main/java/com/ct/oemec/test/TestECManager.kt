@@ -35,10 +35,44 @@ object TestECManager {
     val mTestExpandingCapacity: TestExpandingCapacity = TestExpandingCapacity()
     private var mTranslateTimer: Timer? = null
     private var mTranslateTask: TimerTask? = null
+    private var mAvatarTimer: Timer? = null
+    private var mAvatarTask: TimerTask? = null
+    private var mCurrentAvatarId: String = "avatar_cat"
+    private var mMyLanguage: String = "Chinese"
+    private var mOtherLanguage: String = "English"
+
+    // module,func -> data，仅用于本地mock，模拟云端AI能力（真实场景中AI能力应部署在云端，
+    // 通过运营商/终端厂商的拓展能力服务转发，而非集成在SDK或小程序内）
+    private val AVATAR_LIST = listOf(
+        mapOf("id" to "avatar_cat", "name" to "Cat", "thumbnail" to "avatar_cat_thumb.png"),
+        mapOf("id" to "avatar_robot", "name" to "Robot", "thumbnail" to "avatar_robot_thumb.png"),
+        mapOf("id" to "avatar_panda", "name" to "Panda", "thumbnail" to "avatar_panda_thumb.png")
+    )
+
+    // 按语言对循环返回的模拟翻译语料，真实实现中应替换为云端翻译服务返回的结果
+    private val TRANSLATE_PHRASES = mapOf(
+        ("Chinese" to "English") to listOf(
+            mapOf("myOriginal" to "你好", "myTranslate" to "hello"),
+            mapOf("myOriginal" to "今天天气不错", "myTranslate" to "the weather is nice today"),
+            mapOf("myOriginal" to "再见", "myTranslate" to "goodbye")
+        ),
+        ("English" to "Chinese") to listOf(
+            mapOf("myOriginal" to "good morning", "myTranslate" to "早上好"),
+            mapOf("myOriginal" to "how are you", "myTranslate" to "你好吗"),
+            mapOf("myOriginal" to "see you later", "myTranslate" to "回头见")
+        ),
+        ("Chinese" to "Japanese") to listOf(
+            mapOf("myOriginal" to "你好", "myTranslate" to "こんにちは"),
+            mapOf("myOriginal" to "谢谢", "myTranslate" to "ありがとう")
+        )
+    )
+    private var mMyPhraseIndex = 0
+    private var mOtherPhraseIndex = 0
 
     fun onUnbind() {
         mCallback = null
         stopTranslate()
+        stopAvatar()
     }
 
     class TestExpandingCapacity : IExpandingCapacity.Stub() {
@@ -66,7 +100,21 @@ object TestECManager {
                             val responseData = OEMECBaseData(
                                 "Translate",
                                 "languageListCallback",
-                                mutableMapOf("list" to mutableListOf("Chinese", "English"))
+                                mutableMapOf("list" to mutableListOf("Chinese", "English", "Japanese"))
+                            )
+                            val responseString = JsonUtil.toJson(responseData)
+                            mCallback?.onCallback(responseString)
+                        }
+                        "setLanguage" -> {
+                            val requestDataDetail = content.let { JsonUtil.fromJson(it, TranslateLanguageRequest::class.java) }
+                            requestDataDetail?.data?.myLanguage?.let { mMyLanguage = it }
+                            requestDataDetail?.data?.otherLanguage?.let { mOtherLanguage = it }
+                            mMyPhraseIndex = 0
+                            mOtherPhraseIndex = 0
+                            val responseData = OEMECBaseData(
+                                "Translate",
+                                "setLanguageCallback",
+                                mutableMapOf("myLanguage" to mMyLanguage, "otherLanguage" to mOtherLanguage)
                             )
                             val responseString = JsonUtil.toJson(responseData)
                             mCallback?.onCallback(responseString)
@@ -78,7 +126,41 @@ object TestECManager {
                             stopTranslate()
                         }
                         "voice" -> {
-
+                            // 由小程序端麦克风检测到本端说话时触发（仅mock：真实场景中应携带音频数据，
+                            // 交由云端语音识别+翻译服务处理；此处直接返回预设语料模拟识别+翻译结果）
+                            pushMyUtterance()
+                        }
+                    }
+                }
+                "Avatar" -> {
+                    when(requestData.func){
+                        "avatarList" -> {
+                            val responseData = OEMECBaseData(
+                                "Avatar",
+                                "avatarListCallback",
+                                mutableMapOf("list" to AVATAR_LIST)
+                            )
+                            val responseString = JsonUtil.toJson(responseData)
+                            mCallback?.onCallback(responseString)
+                        }
+                        "setAvatar" -> {
+                            val requestDataDetail = content.let { JsonUtil.fromJson(it, SetAvatarRequest::class.java) }
+                            requestDataDetail?.data?.avatarId?.let { mCurrentAvatarId = it }
+                            val responseData = OEMECBaseData(
+                                "Avatar",
+                                "setAvatarCallback",
+                                mutableMapOf("avatarId" to mCurrentAvatarId)
+                            )
+                            val responseString = JsonUtil.toJson(responseData)
+                            mCallback?.onCallback(responseString)
+                        }
+                        "setAvatarEnable" -> {
+                            val requestDataDetail = content.let { JsonUtil.fromJson(it, SetAvatarEnableRequest::class.java) }
+                            if (requestDataDetail?.data?.isEnable == true) {
+                                startAvatar()
+                            } else {
+                                stopAvatar()
+                            }
                         }
                     }
                 }
@@ -118,6 +200,8 @@ object TestECManager {
         }
     }
 
+    // start/stop模拟对端语音的持续到达（真实场景中，对端语音无法被本端小程序获取，
+    // 只能由终端厂商/运营商的拓展能力服务在原生侧采集并推送翻译结果）
     fun startTranslate(){
         if (mTranslateTimer == null) {
             mTranslateTimer = Timer()
@@ -125,14 +209,15 @@ object TestECManager {
         if (mTranslateTask == null){
             mTranslateTask =  object : TimerTask(){
                 override fun run() {
+                    val otherPhrases = TRANSLATE_PHRASES[mOtherLanguage to mMyLanguage] ?: TRANSLATE_PHRASES[("English" to "Chinese")]!!
+                    val otherPhrase = otherPhrases[mOtherPhraseIndex % otherPhrases.size]
+                    mOtherPhraseIndex++
                     val responseData = OEMECBaseData(
                         "Translate",
                         "translateResultCallback",
                         mutableMapOf(
-                            "myOriginal" to "你好",
-                            "myTranslate" to "hello",
-                            "otherOriginal" to "good morning",
-                            "otherTranslate" to "早上好"
+                            "otherOriginal" to otherPhrase["myOriginal"],
+                            "otherTranslate" to otherPhrase["myTranslate"]
                         )
                     )
                     val responseString = JsonUtil.toJson(responseData)
@@ -140,7 +225,24 @@ object TestECManager {
                 }
             }
         }
-        mTranslateTimer!!.schedule(mTranslateTask, 0, 1000)
+        mTranslateTimer!!.schedule(mTranslateTask, 0, 4000)
+    }
+
+    // voice：由小程序端麦克风检测到本端说话时触发一次，模拟识别+翻译本端刚说的一句话
+    fun pushMyUtterance(){
+        val myPhrases = TRANSLATE_PHRASES[mMyLanguage to mOtherLanguage] ?: TRANSLATE_PHRASES[("Chinese" to "English")]!!
+        val myPhrase = myPhrases[mMyPhraseIndex % myPhrases.size]
+        mMyPhraseIndex++
+        val responseData = OEMECBaseData(
+            "Translate",
+            "translateResultCallback",
+            mutableMapOf(
+                "myOriginal" to myPhrase["myOriginal"],
+                "myTranslate" to myPhrase["myTranslate"]
+            )
+        )
+        val responseString = JsonUtil.toJson(responseData)
+        mCallback?.onCallback(responseString)
     }
 
     fun stopTranslate(){
@@ -153,4 +255,75 @@ object TestECManager {
             mTranslateTask = null
         }
     }
+
+    private val AVATAR_EXPRESSIONS = listOf("neutral", "talking", "smiling")
+    private var mAvatarFrameIndex = 0
+
+    fun startAvatar(){
+        if (mAvatarTimer == null) {
+            mAvatarTimer = Timer()
+        }
+        if (mAvatarTask == null){
+            mAvatarTask = object : TimerTask(){
+                override fun run() {
+                    // 模拟caller说话时头像口型/表情的周期性变化，真实实现应来自云端AI视频驱动能力
+                    val mouthOpen = mAvatarFrameIndex % 2 == 0
+                    val expression = AVATAR_EXPRESSIONS[mAvatarFrameIndex % AVATAR_EXPRESSIONS.size]
+                    mAvatarFrameIndex++
+                    val responseData = OEMECBaseData(
+                        "Avatar",
+                        "avatarFrameCallback",
+                        mutableMapOf(
+                            "avatarId" to mCurrentAvatarId,
+                            "mouthOpen" to mouthOpen,
+                            "expression" to expression
+                        )
+                    )
+                    val responseString = JsonUtil.toJson(responseData)
+                    mCallback?.onCallback(responseString)
+                }
+            }
+        }
+        mAvatarTimer!!.schedule(mAvatarTask, 0, 300)
+    }
+
+    fun stopAvatar(){
+        if (mAvatarTimer != null) {
+            mAvatarTimer!!.cancel()
+            mAvatarTimer = null
+        }
+        if (mAvatarTask != null){
+            mAvatarTask!!.cancel()
+            mAvatarTask = null
+        }
+        mAvatarFrameIndex = 0
+    }
 }
+
+data class TranslateLanguageRequest(
+    var module: String,
+    var func: String,
+    var data: TranslateLanguageData
+)
+data class TranslateLanguageData(
+    var myLanguage: String,
+    var otherLanguage: String
+)
+
+data class SetAvatarRequest(
+    var module: String,
+    var func: String,
+    var data: SetAvatarData
+)
+data class SetAvatarData(
+    var avatarId: String
+)
+
+data class SetAvatarEnableRequest(
+    var module: String,
+    var func: String,
+    var data: SetAvatarEnableData
+)
+data class SetAvatarEnableData(
+    var isEnable: Boolean
+)

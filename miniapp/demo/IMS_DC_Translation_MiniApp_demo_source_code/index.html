@@ -1,0 +1,271 @@
+<!--
+  ~ Copyright 2025-China Telecom Research Institute.
+  ~ All Rights Reserved.
+  ~
+  ~ SPDX-License-Identifier: Apache-2.0
+  -->
+<!--
+  Mic usage note (mock only): this mini-app calls getUserMedia to detect WHEN the
+  caller is speaking (via MINIAPP_RECORD_AUDIO + the SDK's getUserMedia license gate).
+  It does NOT run real speech recognition or translation locally — crossing the volume
+  threshold just tells the EC mock "a speech turn happened", and the mock replies with
+  canned text standing in for a real cloud STT+translation result. The far end's speech
+  can't be captured here at all (getUserMedia only reaches local input devices, never the
+  received call audio), so that side stays on a native-simulated timer.
+
+  Two SDK-platform quirks this mini-app has to work around (see properties.json + script below):
+  1. getUserMedia is only granted if BOTH MINIAPP_CAMERA and MINIAPP_RECORD_AUDIO are declared
+     and granted, even for an audio-only request (CTWebChromeClient.onPermissionRequest checks
+     both unconditionally) — hence MINIAPP_CAMERA is declared despite never using video.
+  2. getUserMedia additionally requires calling the setSystemApiLicense JS API once first
+     (api:"getUserMedia") — without it the permission check silently never resolves.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Live Translate</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body, html { width: 100%; height: 100%; background: #101014; overflow: hidden; font-family: sans-serif; color: #fff; }
+    .stage { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
+    .header {
+      padding: 16px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      background: #16161c;
+    }
+    select {
+      flex: 1;
+      background: #22263a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 13px;
+    }
+    .arrow { color: #9aa0b4; }
+    .captions {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .bubble {
+      max-width: 80%;
+      padding: 10px 14px;
+      border-radius: 14px;
+      font-size: 15px;
+      line-height: 1.4;
+    }
+    .bubble .original { opacity: 0.7; font-size: 12px; display: block; margin-bottom: 2px; }
+    .bubble.me { align-self: flex-end; background: #4c8bf5; border-bottom-right-radius: 4px; }
+    .bubble.other { align-self: flex-start; background: #2b2f42; border-bottom-left-radius: 4px; }
+    .footer {
+      padding: 16px calc(16px) calc(16px + env(safe-area-inset-bottom));
+      display: flex;
+      justify-content: center;
+      background: #16161c;
+    }
+    .toggle-btn {
+      padding: 12px 32px;
+      border-radius: 24px;
+      border: none;
+      background: #4c8bf5;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .toggle-btn.active { background: #e5484d; }
+    .status { text-align: center; color: #9aa0b4; font-size: 12px; padding: 6px; }
+  </style>
+</head>
+<body>
+<div class="stage">
+  <div class="header">
+    <select id="myLanguage"></select>
+    <span class="arrow">↔</span>
+    <select id="otherLanguage"></select>
+  </div>
+  <div class="status" id="status">connecting to translation capability…</div>
+  <div class="captions" id="captions"></div>
+  <div class="footer">
+    <button class="toggle-btn" id="toggleBtn">Start translating</button>
+  </div>
+</div>
+
+<script src="./webrtcDC.js"></script>
+<script>
+  // webrtcDC.js只用于获得dsBridge运行时（native<->JS桥接），本小程序不使用其DC/RTCPeerConnection能力
+  var dsBridge = window.dsBridge;
+
+  var translating = false;
+  var myLanguage = "Chinese";
+  var otherLanguage = "English";
+
+  var statusEl = document.getElementById("status");
+  var captionsEl = document.getElementById("captions");
+  var toggleBtn = document.getElementById("toggleBtn");
+  var myLangSelect = document.getElementById("myLanguage");
+  var otherLangSelect = document.getElementById("otherLanguage");
+
+  function ecRequest(module, func, data) {
+    dsBridge.call("async", {
+      event: "ECEvent",
+      function: "expandingCapacityRequest",
+      params: { provider: "OEM", module: module, func: func, data: data || {} }
+    }, function () {});
+  }
+
+  function renderLanguageOptions(list) {
+    [myLangSelect, otherLangSelect].forEach(function (select) {
+      select.innerHTML = "";
+      list.forEach(function (lang) {
+        var opt = document.createElement("option");
+        opt.value = lang;
+        opt.textContent = lang;
+        select.appendChild(opt);
+      });
+    });
+    myLangSelect.value = myLanguage;
+    otherLangSelect.value = otherLanguage;
+  }
+
+  function pushSetLanguage() {
+    ecRequest("Translate", "setLanguage", { myLanguage: myLanguage, otherLanguage: otherLanguage });
+  }
+
+  myLangSelect.addEventListener("change", function () {
+    myLanguage = myLangSelect.value;
+    pushSetLanguage();
+  });
+  otherLangSelect.addEventListener("change", function () {
+    otherLanguage = otherLangSelect.value;
+    pushSetLanguage();
+  });
+
+  function addBubble(kind, original, translated) {
+    var bubble = document.createElement("div");
+    bubble.className = "bubble " + kind;
+    bubble.innerHTML = "<span class=\"original\">" + original + "</span>" + translated;
+    captionsEl.appendChild(bubble);
+    captionsEl.scrollTop = captionsEl.scrollHeight;
+  }
+
+  // --- Mic-based "I'm speaking" detection (mock only, see note at top of file) ---
+  var audioCtx = null;
+  var micStream = null;
+  var analyser = null;
+  var micRafId = null;
+  var lastVoiceTriggerAt = 0;
+  var VOICE_TRIGGER_COOLDOWN_MS = 1500;
+  var VOICE_VOLUME_THRESHOLD = 0.05; // RMS on a 0..1 scale; tune per device mic sensitivity
+
+  var micLicenseGranted = false;
+
+  function grantMicLicenseOnce() {
+    if (micLicenseGranted) return;
+    micLicenseGranted = true;
+    // Required once before getUserMedia will resolve at all (see quirk #2 in the header comment).
+    // The license string itself isn't actually checked (LicenseManager.verifyLicense is stubbed
+    // true in this open-source build) — only that this call has happened.
+    dsBridge.call("async", {
+      event: "MiniAppEvent",
+      function: "setSystemApiLicense",
+      params: { api: "getUserMedia", license: "local-mock-license" }
+    }, function () {});
+  }
+
+  function startMicListening() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      statusEl.textContent = "mic not available in this WebView";
+      return;
+    }
+    grantMicLicenseOnce();
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      micStream = stream;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var source = audioCtx.createMediaStreamSource(stream);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      var data = new Uint8Array(analyser.fftSize);
+
+      function tick() {
+        if (!analyser) return;
+        analyser.getByteTimeDomainData(data);
+        var sumSquares = 0;
+        for (var i = 0; i < data.length; i++) {
+          var v = (data[i] - 128) / 128;
+          sumSquares += v * v;
+        }
+        var rms = Math.sqrt(sumSquares / data.length);
+        var now = Date.now();
+        if (rms > VOICE_VOLUME_THRESHOLD && now - lastVoiceTriggerAt > VOICE_TRIGGER_COOLDOWN_MS) {
+          lastVoiceTriggerAt = now;
+          ecRequest("Translate", "voice", {});
+        }
+        micRafId = requestAnimationFrame(tick);
+      }
+      tick();
+    }).catch(function () {
+      statusEl.textContent = "mic permission denied";
+    });
+  }
+
+  function stopMicListening() {
+    if (micRafId) { cancelAnimationFrame(micRafId); micRafId = null; }
+    if (micStream) { micStream.getTracks().forEach(function (t) { t.stop(); }); micStream = null; }
+    if (audioCtx) { audioCtx.close(); audioCtx = null; }
+    analyser = null;
+  }
+
+  toggleBtn.addEventListener("click", function () {
+    translating = !translating;
+    toggleBtn.textContent = translating ? "Stop translating" : "Start translating";
+    toggleBtn.classList.toggle("active", translating);
+    statusEl.textContent = translating ? "listening for speech on both ends…" : "translation stopped";
+    ecRequest("Translate", translating ? "start" : "stop", {});
+    if (translating) {
+      startMicListening();
+    } else {
+      stopMicListening();
+    }
+  });
+
+  // 接收来自EC能力提供方（当前为本地mock，真实场景为云端AI翻译能力经拓展能力服务转发）的推送
+  dsBridge.register("expandingCapacityNotify", function (content) {
+    try {
+      var payload = JSON.parse(content);
+      if (payload.module !== "Translate") return;
+      if (payload.func === "languageListCallback") {
+        renderLanguageOptions(payload.data.list);
+      } else if (payload.func === "translateResultCallback") {
+        // myOriginal/myTranslate: 本端麦克风检测到说话时触发一次；
+        // otherOriginal/otherTranslate: 对端语音到达时触发（原生侧模拟，非本端麦克风采集）
+        if (payload.data.myOriginal) addBubble("me", payload.data.myOriginal, payload.data.myTranslate);
+        if (payload.data.otherOriginal) addBubble("other", payload.data.otherOriginal, payload.data.otherTranslate);
+      } else if (payload.func === "setLanguageCallback") {
+        statusEl.textContent = translating
+          ? "listening for speech on both ends…"
+          : payload.data.myLanguage + " ↔ " + payload.data.otherLanguage + " ready";
+      }
+    } catch (e) {}
+  });
+
+  dsBridge.call("async", {
+    event: "ECEvent",
+    function: "expandingCapacityRegister",
+    params: { providerModules: ["OEM-Translate"] }
+  }, function () {
+    statusEl.textContent = "translation stopped";
+    ecRequest("Translate", "languageList", {});
+  });
+</script>
+</body>
+</html>

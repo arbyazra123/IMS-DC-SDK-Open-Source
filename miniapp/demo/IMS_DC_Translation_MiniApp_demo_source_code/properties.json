@@ -1,0 +1,14 @@
+{
+  "appId": "602",
+  "version": "1.0.0",
+  "permissions": ["MINIAPP_RECORD_AUDIO", "MINIAPP_CAMERA"],
+  "windowStyle": {
+    "isFullScreen": true,
+    "statusBarColor": "#000000",
+    "statusBarTitleColor": 1,
+    "navigationBarColor": "#000000"
+  },
+  "shouldCreateControlADC": false,
+  "shouldStartRemoteApp": false,
+  "canStartedByOthers": true
+}
