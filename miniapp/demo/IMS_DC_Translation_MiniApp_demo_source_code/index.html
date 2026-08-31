@@ -5,11 +5,14 @@
   ~ SPDX-License-Identifier: Apache-2.0
   -->
 <!--
-  Mic usage note (mock only): this mini-app calls getUserMedia to detect WHEN the
-  caller is speaking (via MINIAPP_RECORD_AUDIO + the SDK's getUserMedia license gate).
-  It does NOT run real speech recognition or translation locally — crossing the volume
-  threshold just tells the local EC mock "a speech turn happened", and the mock replies
-  with canned text standing in for a real cloud STT+translation result of what *I* said.
+  Mic usage note: this mini-app calls getUserMedia to detect WHEN the caller is speaking
+  (via MINIAPP_RECORD_AUDIO + the SDK's getUserMedia license gate), and on each detected
+  utterance sends a ~2s rolling buffer of real captured PCM16 audio in the "voice" EC
+  request. It does NOT run speech recognition or translation locally itself — that's the
+  EC provider's job. Against the default TestECManager mock the audio is ignored and you
+  get canned text back; against the real translate-tflite reference provider
+  (../../../translate-tflite/README.md) the same request actually runs on-device
+  ASR + MT on that audio. Same mini-app, same request shape, either provider.
 
   Getting my translated caption to the OTHER caller is a second, separate step: this
   mini-app runs identically on both phones (shouldStartRemoteApp:true), and the two
@@ -211,14 +214,68 @@
     dc.send(bytes);
   }
 
-  // --- Mic-based "I'm speaking" detection (mock only, see note at top of file) ---
+  // --- Mic-based "I'm speaking" detection + utterance capture ---
+  // Detection is mock-agnostic; the captured audio is what makes this mini-app work
+  // unmodified against BOTH the TestECManager mock (which ignores it) and a real
+  // provider like translate-tflite (which needs it) — see that module's README.
   var audioCtx = null;
   var micStream = null;
   var analyser = null;
+  var scriptProcessor = null;
+  var silentGain = null;
+  var ringBuffer = null;
+  var ringWriteIndex = 0;
+  var RING_SECONDS = 2;
+  var TARGET_SAMPLE_RATE = 16000;
   var micRafId = null;
   var lastVoiceTriggerAt = 0;
   var VOICE_TRIGGER_COOLDOWN_MS = 1500;
   var VOICE_VOLUME_THRESHOLD = 0.05; // RMS on a 0..1 scale; tune per device mic sensitivity
+
+  function resampleLinear(samples, fromRate, toRate) {
+    if (fromRate === toRate) return samples;
+    var ratio = fromRate / toRate;
+    var newLength = Math.round(samples.length / ratio);
+    var result = new Float32Array(newLength);
+    for (var i = 0; i < newLength; i++) {
+      var srcIndex = i * ratio;
+      var i0 = Math.floor(srcIndex);
+      var i1 = Math.min(i0 + 1, samples.length - 1);
+      var frac = srcIndex - i0;
+      result[i] = samples[i0] * (1 - frac) + samples[i1] * frac;
+    }
+    return result;
+  }
+
+  function floatTo16BitPCM(floatSamples) {
+    var bytes = new Uint8Array(floatSamples.length * 2);
+    var view = new DataView(bytes.buffer);
+    for (var i = 0; i < floatSamples.length; i++) {
+      var s = Math.max(-1, Math.min(1, floatSamples[i]));
+      view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    return bytes;
+  }
+
+  function bytesToBase64(bytes) {
+    var binary = "";
+    var chunkSize = 0x8000;
+    for (var i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  }
+
+  function captureUtteranceAsBase64() {
+    if (!ringBuffer) return null;
+    var len = ringBuffer.length;
+    var ordered = new Float32Array(len);
+    for (var i = 0; i < len; i++) {
+      ordered[i] = ringBuffer[(ringWriteIndex + i) % len];
+    }
+    var resampled = resampleLinear(ordered, audioCtx.sampleRate, TARGET_SAMPLE_RATE);
+    return bytesToBase64(floatTo16BitPCM(resampled));
+  }
 
   var micLicenseGranted = false;
 
@@ -245,24 +302,46 @@
       micStream = stream;
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       var source = audioCtx.createMediaStreamSource(stream);
+
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 512;
       source.connect(analyser);
-      var data = new Uint8Array(analyser.fftSize);
+      var volumeData = new Uint8Array(analyser.fftSize);
+
+      // Rolling buffer of raw samples so a detected utterance can be sent whole,
+      // not just "a threshold crossing happened".
+      ringBuffer = new Float32Array(Math.floor(audioCtx.sampleRate * RING_SECONDS));
+      ringWriteIndex = 0;
+      scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+      source.connect(scriptProcessor);
+      // ScriptProcessorNode only fires onaudioprocess while connected to a destination;
+      // route through a silent gain so we don't play the mic back out loud.
+      silentGain = audioCtx.createGain();
+      silentGain.gain.value = 0;
+      scriptProcessor.connect(silentGain);
+      silentGain.connect(audioCtx.destination);
+      scriptProcessor.onaudioprocess = function (e) {
+        var input = e.inputBuffer.getChannelData(0);
+        for (var i = 0; i < input.length; i++) {
+          ringBuffer[ringWriteIndex] = input[i];
+          ringWriteIndex = (ringWriteIndex + 1) % ringBuffer.length;
+        }
+      };
 
       function tick() {
         if (!analyser) return;
-        analyser.getByteTimeDomainData(data);
+        analyser.getByteTimeDomainData(volumeData);
         var sumSquares = 0;
-        for (var i = 0; i < data.length; i++) {
-          var v = (data[i] - 128) / 128;
+        for (var i = 0; i < volumeData.length; i++) {
+          var v = (volumeData[i] - 128) / 128;
           sumSquares += v * v;
         }
-        var rms = Math.sqrt(sumSquares / data.length);
+        var rms = Math.sqrt(sumSquares / volumeData.length);
         var now = Date.now();
         if (rms > VOICE_VOLUME_THRESHOLD && now - lastVoiceTriggerAt > VOICE_TRIGGER_COOLDOWN_MS) {
           lastVoiceTriggerAt = now;
-          ecRequest("Translate", "voice", {});
+          var audioBase64 = captureUtteranceAsBase64();
+          ecRequest("Translate", "voice", audioBase64 ? { audio: audioBase64, sampleRate: TARGET_SAMPLE_RATE } : {});
         }
         micRafId = requestAnimationFrame(tick);
       }
@@ -274,9 +353,12 @@
 
   function stopMicListening() {
     if (micRafId) { cancelAnimationFrame(micRafId); micRafId = null; }
+    if (scriptProcessor) { scriptProcessor.disconnect(); scriptProcessor.onaudioprocess = null; scriptProcessor = null; }
+    if (silentGain) { silentGain.disconnect(); silentGain = null; }
     if (micStream) { micStream.getTracks().forEach(function (t) { t.stop(); }); micStream = null; }
     if (audioCtx) { audioCtx.close(); audioCtx = null; }
     analyser = null;
+    ringBuffer = null;
   }
 
   toggleBtn.addEventListener("click", function () {

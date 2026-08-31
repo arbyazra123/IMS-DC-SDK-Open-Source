@@ -21,7 +21,7 @@ The EC module that lets a caller replace their own live video with a synthetic c
 _Avoid_: AIVideo, face swap
 
 **Translate module**:
-The EC module that turns the local caller's own detected speech into original+translated text (`voice` → `translateResultCallback`). It only ever produces results for the *local* participant — getting a translated caption to the other participant is not an EC concern at all, it happens over the ADC (see `docs/adr/0001-mini-app-media-access-is-asymmetric.md`).
+The EC module that turns the local caller's own detected speech into original+translated text (`voice` → `translateResultCallback`). It only ever produces results for the *local* participant — getting a translated caption to the other participant is not an EC concern at all, it happens over the ADC (see `docs/adr/0001-mini-app-media-access-is-asymmetric.md`). Two `IExpandingCapacity` implementations answer it identically on the wire: `oemec`'s `TestECManager` (mock, canned phrases) and `translate-tflite`'s `TranslateTfliteManager` (reference, real on-device TFLite ASR+MT — ships no model files, see that module's README).
 
 **Application Data Channel (ADC)**:
 The peer-to-peer channel (`createAppDataChannel`/`sendData`/`messageNotify`, wrapped by `webrtcDC.js`'s `RTCDataChannel`) connecting the *same* mini-app running on the caller's and callee's devices, riding the network's IMS Data Channel. Distinct from EC: EC is local (device ↔ its own capability provider), ADC is peer-to-peer (mini-app instance ↔ the other side's mini-app instance). A mini-app that wants the other side's mini-app to react to something (e.g. today's translated caption) must send it over the ADC itself — no EC push can substitute for that.

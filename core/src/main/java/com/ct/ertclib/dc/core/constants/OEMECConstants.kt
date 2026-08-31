@@ -40,6 +40,7 @@ object OEMECConstants {
     const val FUNCTION_ON_VIDEO_SHOW_INFO = "onVideoShowInfo"
     const val FUNCTION_DETECT_CALLBACK = "detectCallback"
     const val FUNCTION_TRANSLATE_RESULT_CALLBACK = "translateResultCallback"
+    const val FUNCTION_TRANSLATE_ERROR_CALLBACK = "translateErrorCallback"
     const val FUNCTION_SET_LANGUAGE_CALLBACK = "setLanguageCallback"
     const val FUNCTION_QUERY_EXPANDED_ENABLED = "queryExpandEnable"
     const val FUNCTION_EXPAND = "expand"
