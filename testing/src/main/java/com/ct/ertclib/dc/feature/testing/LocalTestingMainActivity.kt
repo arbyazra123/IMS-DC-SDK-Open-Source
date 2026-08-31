@@ -68,6 +68,8 @@ class LocalTestingMainActivity : AppCompatActivity(), KoinComponent {
         setContentView(binding.root)
         window.navigationBarColor = Color.TRANSPARENT
 
+        DefaultMiniAppSeeder.seedIfNeeded(this)
+
         viewModel = ViewModelProvider(this)[TestingViewModel::class.java]
         DCSocketManager.registerCallObserver { value ->
             when(value){
