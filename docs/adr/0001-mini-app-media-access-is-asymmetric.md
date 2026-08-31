@@ -16,9 +16,14 @@ microphone via `getUserMedia({audio:true})`, but only after clearing two platfor
 have already called `setSystemApiLicense` for `"getUserMedia"` — skipping either leaves the
 permission prompt unresolved forever (no grant, no deny, no rejection).
 
-Consequence: any EC capability that reacts to "what the caller is saying/showing" can only
-be event-driven by the far end's native provider (pushed in via an EC callback), never
-mini-app-detected; only the local user's own mic input is directly reachable from JS. The
-`Avatar` mini-app is therefore a control surface only (it can't render the swapped video
-itself), and `Translate` can locally detect "I just spoke" via mic volume but must rely on
-a native-simulated push for "the other side just spoke."
+Consequence: only the local user's own mic input is directly reachable from a mini-app's JS —
+there is no EC request that hands you the far end's raw speech or video. The `Avatar` mini-app
+is therefore a control surface only (it can't render the swapped video itself; that has to
+happen natively before the video is ever transmitted, so the callee sees it for free with no
+extra data path). `Translate` can locally detect "I just spoke" via mic volume and get a local
+EC result for it, but getting that result in front of the *other* participant is not an EC
+concern at all — it requires the ADC (Application Data Channel): the identical mini-app runs
+on both devices (`shouldStartRemoteApp: true`), and each instance sends its own local
+translation result to the other's instance over the ADC. There is no capability provider that
+can simulate "the other side is speaking" on the EC path — that data can only ever come from
+the other side's own mini-app instance, over the peer channel.

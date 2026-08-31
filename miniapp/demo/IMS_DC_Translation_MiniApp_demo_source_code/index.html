@@ -8,10 +8,17 @@
   Mic usage note (mock only): this mini-app calls getUserMedia to detect WHEN the
   caller is speaking (via MINIAPP_RECORD_AUDIO + the SDK's getUserMedia license gate).
   It does NOT run real speech recognition or translation locally — crossing the volume
-  threshold just tells the EC mock "a speech turn happened", and the mock replies with
-  canned text standing in for a real cloud STT+translation result. The far end's speech
-  can't be captured here at all (getUserMedia only reaches local input devices, never the
-  received call audio), so that side stays on a native-simulated timer.
+  threshold just tells the local EC mock "a speech turn happened", and the mock replies
+  with canned text standing in for a real cloud STT+translation result of what *I* said.
+
+  Getting my translated caption to the OTHER caller is a second, separate step: this
+  mini-app runs identically on both phones (shouldStartRemoteApp:true), and the two
+  instances exchange each side's local translation result over the Application Data
+  Channel (ADC) — the same peer-to-peer channel webrtcDC.js/RTCDataChannel exposes to
+  any mini-app. The far end's speech is never captured by MY getUserMedia at all
+  (it only reaches local input devices) — what I show as "the other person said X" is
+  literally a message their mini-app instance sent me over the ADC, not anything my
+  local EC mock invented.
 
   Two SDK-platform quirks this mini-app has to work around (see properties.json + script below):
   1. getUserMedia is only granted if BOTH MINIAPP_CAMERA and MINIAPP_RECORD_AUDIO are declared
@@ -19,6 +26,8 @@
      both unconditionally) — hence MINIAPP_CAMERA is declared despite never using video.
   2. getUserMedia additionally requires calling the setSystemApiLicense JS API once first
      (api:"getUserMedia") — without it the permission check silently never resolves.
+  3. The ADC dcLabel must contain "_<appId>_" (DCMiniUseCase.createAppDataChannel validates
+     this) — see APP_ID/DC_LABEL below.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -101,8 +110,10 @@
 
 <script src="./webrtcDC.js"></script>
 <script>
-  // webrtcDC.js只用于获得dsBridge运行时（native<->JS桥接），本小程序不使用其DC/RTCPeerConnection能力
   var dsBridge = window.dsBridge;
+
+  var APP_ID = "602"; // must match properties.json appId
+  var DC_LABEL = "local_" + APP_ID + "_1_translate"; // must contain "_<appId>_"
 
   var translating = false;
   var myLanguage = "Chinese";
@@ -155,6 +166,49 @@
     bubble.innerHTML = "<span class=\"original\">" + original + "</span>" + translated;
     captionsEl.appendChild(bubble);
     captionsEl.scrollTop = captionsEl.scrollHeight;
+  }
+
+  // --- ADC: peer-to-peer channel to the SAME mini-app running on the other caller's phone ---
+  var pc = null;
+  var dc = null;
+  var peerReady = false;
+
+  function openPeerChannel() {
+    if (dc) return;
+    pc = new RTCPeerConnection();
+    var xml = "<DataChannelAppInfo><DataChannelApp appId=\"" + APP_ID + "\">" +
+      "<DataChannel dcId=\"1\"><DcLabel>" + DC_LABEL + "</DcLabel><Subprotocol></Subprotocol>" +
+      "<Ordered>1</Ordered><MaxRetr>0</MaxRetr><MaxTime>0</MaxTime><Priority></Priority>" +
+      "<UseCase>1</UseCase><AutoAcceptDcSetup>0</AutoAcceptDcSetup><Bandwidth>500</Bandwidth>" +
+      "<QosHint>loss=0.0002;latency=600</QosHint></DataChannel></DataChannelApp></DataChannelAppInfo>";
+    dc = pc.createDataChannel(xml, null);
+    dc.onopen = function () {
+      peerReady = true;
+      statusEl.textContent = "connected to peer · listening";
+    };
+    dc.onclose = function () {
+      peerReady = false;
+    };
+    dc.onmessage = function (event) {
+      // event.data is an ArrayBuffer (see webrtcDC.js RTCDataChannel#channelMessageNotify)
+      try {
+        var text = new TextDecoder().decode(event.data);
+        var msg = JSON.parse(text);
+        addBubble("other", msg.original, msg.translated);
+      } catch (e) {}
+    };
+  }
+
+  function closePeerChannel() {
+    if (dc) { dc.close(); dc = null; }
+    pc = null;
+    peerReady = false;
+  }
+
+  function sendMyUtteranceToPeer(original, translated) {
+    if (!dc || !peerReady) return;
+    var bytes = new TextEncoder().encode(JSON.stringify({ original: original, translated: translated }));
+    dc.send(bytes);
   }
 
   // --- Mic-based "I'm speaking" detection (mock only, see note at top of file) ---
@@ -229,12 +283,14 @@
     translating = !translating;
     toggleBtn.textContent = translating ? "Stop translating" : "Start translating";
     toggleBtn.classList.toggle("active", translating);
-    statusEl.textContent = translating ? "listening for speech on both ends…" : "translation stopped";
+    statusEl.textContent = translating ? "connecting to peer…" : "translation stopped";
     ecRequest("Translate", translating ? "start" : "stop", {});
     if (translating) {
       startMicListening();
+      openPeerChannel();
     } else {
       stopMicListening();
+      closePeerChannel();
     }
   });
 
@@ -246,13 +302,13 @@
       if (payload.func === "languageListCallback") {
         renderLanguageOptions(payload.data.list);
       } else if (payload.func === "translateResultCallback") {
-        // myOriginal/myTranslate: 本端麦克风检测到说话时触发一次；
-        // otherOriginal/otherTranslate: 对端语音到达时触发（原生侧模拟，非本端麦克风采集）
-        if (payload.data.myOriginal) addBubble("me", payload.data.myOriginal, payload.data.myTranslate);
-        if (payload.data.otherOriginal) addBubble("other", payload.data.otherOriginal, payload.data.otherTranslate);
+        // myOriginal/myTranslate: 本端麦克风检测到说话、本地EC识别+翻译后的结果。
+        // 展示在本端UI的同时，需要通过ADC发给对端，让对端小程序把它显示为"对方说的话"
+        addBubble("me", payload.data.myOriginal, payload.data.myTranslate);
+        sendMyUtteranceToPeer(payload.data.myOriginal, payload.data.myTranslate);
       } else if (payload.func === "setLanguageCallback") {
         statusEl.textContent = translating
-          ? "listening for speech on both ends…"
+          ? (peerReady ? "connected to peer · listening" : "connecting to peer…")
           : payload.data.myLanguage + " ↔ " + payload.data.otherLanguage + " ready";
       }
     } catch (e) {}

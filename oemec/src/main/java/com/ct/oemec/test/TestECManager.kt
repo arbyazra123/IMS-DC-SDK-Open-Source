@@ -33,8 +33,6 @@ object TestECManager {
     private val sLogger = Logger.getLogger(TAG)
     var mCallback: IExpandingCapacityCallback? = null
     val mTestExpandingCapacity: TestExpandingCapacity = TestExpandingCapacity()
-    private var mTranslateTimer: Timer? = null
-    private var mTranslateTask: TimerTask? = null
     private var mAvatarTimer: Timer? = null
     private var mAvatarTask: TimerTask? = null
     private var mCurrentAvatarId: String = "avatar_cat"
@@ -67,11 +65,9 @@ object TestECManager {
         )
     )
     private var mMyPhraseIndex = 0
-    private var mOtherPhraseIndex = 0
 
     fun onUnbind() {
         mCallback = null
-        stopTranslate()
         stopAvatar()
     }
 
@@ -110,7 +106,6 @@ object TestECManager {
                             requestDataDetail?.data?.myLanguage?.let { mMyLanguage = it }
                             requestDataDetail?.data?.otherLanguage?.let { mOtherLanguage = it }
                             mMyPhraseIndex = 0
-                            mOtherPhraseIndex = 0
                             val responseData = OEMECBaseData(
                                 "Translate",
                                 "setLanguageCallback",
@@ -119,15 +114,16 @@ object TestECManager {
                             val responseString = JsonUtil.toJson(responseData)
                             mCallback?.onCallback(responseString)
                         }
-                        "start" -> {
-                            startTranslate()
-                        }
-                        "stop" -> {
-                            stopTranslate()
+                        "start", "stop" -> {
+                            // 本mock中翻译按“说一句话触发一次”（见voice分支），没有需要开关的持续会话；
+                            // 真实的流式云端语音识别服务通常需要显式start/stop一个识别会话，
+                            // 此处保留该函数以维持JS接口不变，暂不需要额外处理
                         }
                         "voice" -> {
                             // 由小程序端麦克风检测到本端说话时触发（仅mock：真实场景中应携带音频数据，
-                            // 交由云端语音识别+翻译服务处理；此处直接返回预设语料模拟识别+翻译结果）
+                            // 交由云端语音识别+翻译服务处理；此处直接返回预设语料模拟识别+翻译结果）。
+                            // 对端听到的内容不会经此EC通道产生——那是对端自己小程序实例的本端麦克风结果，
+                            // 需要由小程序自己通过ADC（Application Data Channel）发送给对端，而不是本地mock出来
                             pushMyUtterance()
                         }
                     }
@@ -200,35 +196,9 @@ object TestECManager {
         }
     }
 
-    // start/stop模拟对端语音的持续到达（真实场景中，对端语音无法被本端小程序获取，
-    // 只能由终端厂商/运营商的拓展能力服务在原生侧采集并推送翻译结果）
-    fun startTranslate(){
-        if (mTranslateTimer == null) {
-            mTranslateTimer = Timer()
-        }
-        if (mTranslateTask == null){
-            mTranslateTask =  object : TimerTask(){
-                override fun run() {
-                    val otherPhrases = TRANSLATE_PHRASES[mOtherLanguage to mMyLanguage] ?: TRANSLATE_PHRASES[("English" to "Chinese")]!!
-                    val otherPhrase = otherPhrases[mOtherPhraseIndex % otherPhrases.size]
-                    mOtherPhraseIndex++
-                    val responseData = OEMECBaseData(
-                        "Translate",
-                        "translateResultCallback",
-                        mutableMapOf(
-                            "otherOriginal" to otherPhrase["myOriginal"],
-                            "otherTranslate" to otherPhrase["myTranslate"]
-                        )
-                    )
-                    val responseString = JsonUtil.toJson(responseData)
-                    mCallback?.onCallback(responseString)
-                }
-            }
-        }
-        mTranslateTimer!!.schedule(mTranslateTask, 0, 4000)
-    }
-
-    // voice：由小程序端麦克风检测到本端说话时触发一次，模拟识别+翻译本端刚说的一句话
+    // voice：由小程序端麦克风检测到本端说话时触发一次，模拟识别+翻译本端刚说的一句话。
+    // 对端要看到这句话的翻译结果，需由小程序自己通过ADC发给对端的小程序实例——
+    // 这个mock只负责本端"识别+翻译"这一步，不负责把结果送到对端
     fun pushMyUtterance(){
         val myPhrases = TRANSLATE_PHRASES[mMyLanguage to mOtherLanguage] ?: TRANSLATE_PHRASES[("Chinese" to "English")]!!
         val myPhrase = myPhrases[mMyPhraseIndex % myPhrases.size]
@@ -243,17 +213,6 @@ object TestECManager {
         )
         val responseString = JsonUtil.toJson(responseData)
         mCallback?.onCallback(responseString)
-    }
-
-    fun stopTranslate(){
-        if (mTranslateTimer != null) {
-            mTranslateTimer!!.cancel()
-            mTranslateTimer = null
-        }
-        if (mTranslateTask != null){
-            mTranslateTask!!.cancel()
-            mTranslateTask = null
-        }
     }
 
     private val AVATAR_EXPRESSIONS = listOf("neutral", "talking", "smiling")

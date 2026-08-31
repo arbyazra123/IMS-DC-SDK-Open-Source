@@ -21,8 +21,12 @@ The EC module that lets a caller replace their own live video with a synthetic c
 _Avoid_: AIVideo, face swap
 
 **Translate module**:
-The EC module that provides live speech translation between the two call participants. `start`/`stop` control the simulated arrival of the *other* party's translated speech (native-sourced, never mini-app-detectable); `voice` is fired by the mini-app itself when its own mic detects the local caller speaking (see `docs/adr/0001-mini-app-media-access-is-asymmetric.md`).
+The EC module that turns the local caller's own detected speech into original+translated text (`voice` → `translateResultCallback`). It only ever produces results for the *local* participant — getting a translated caption to the other participant is not an EC concern at all, it happens over the ADC (see `docs/adr/0001-mini-app-media-access-is-asymmetric.md`).
+
+**Application Data Channel (ADC)**:
+The peer-to-peer channel (`createAppDataChannel`/`sendData`/`messageNotify`, wrapped by `webrtcDC.js`'s `RTCDataChannel`) connecting the *same* mini-app running on the caller's and callee's devices, riding the network's IMS Data Channel. Distinct from EC: EC is local (device ↔ its own capability provider), ADC is peer-to-peer (mini-app instance ↔ the other side's mini-app instance). A mini-app that wants the other side's mini-app to react to something (e.g. today's translated caption) must send it over the ADC itself — no EC push can substitute for that.
+_Avoid_: DC, Data Channel (too broad — also covers the Bootstrap Data Channel), peer channel
 
 **Mini-app**:
-A lightweight, sandboxed HTML/CSS/JS package (`index.html` + `properties.json` at its zip root) that a caller runs during a call inside the SDK's WebView runtime, communicating with native code only through the JS bridge (DSBridge) and EC requests — never by embedding capability logic itself.
+A lightweight, sandboxed HTML/CSS/JS package (`index.html` + `properties.json` at its zip root) that a caller runs during a call inside the SDK's WebView runtime, communicating with native code only through the JS bridge (DSBridge), EC requests (local capabilities), and the ADC (peer mini-app instance) — never by embedding capability logic itself.
 _Avoid_: App, mini program, applet

@@ -8,7 +8,7 @@
     "statusBarTitleColor": 1,
     "navigationBarColor": "#000000"
   },
-  "shouldCreateControlADC": false,
-  "shouldStartRemoteApp": false,
+  "shouldCreateControlADC": true,
+  "shouldStartRemoteApp": true,
   "canStartedByOthers": true
 }
