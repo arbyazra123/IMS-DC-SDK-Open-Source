@@ -149,14 +149,19 @@ class SpeechKitTranslateManager(context: Context) {
         recognizer.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: Bundle?) {
                 consecutiveAudioErrors = 0
-                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                Log.d(TAG, "onResults matches:$matches")
+                val text = matches?.firstOrNull()
                 if (!text.isNullOrEmpty()) {
                     handleRecognizedText(text)
+                } else {
+                    Log.d(TAG, "onResults had no usable text")
                 }
                 restartIfListening(recognizer, locale)
             }
 
             override fun onError(error: Int) {
+                Log.d(TAG, "onError code:$error (${errorName(error)})")
                 if (error == SpeechRecognizer.ERROR_AUDIO) {
                     consecutiveAudioErrors++
                     if (consecutiveAudioErrors >= CONSECUTIVE_AUDIO_ERROR_LIMIT) {
@@ -173,11 +178,11 @@ class SpeechKitTranslateManager(context: Context) {
                 restartIfListening(recognizer, locale)
             }
 
-            override fun onReadyForSpeech(params: Bundle?) {}
-            override fun onBeginningOfSpeech() {}
+            override fun onReadyForSpeech(params: Bundle?) { Log.d(TAG, "onReadyForSpeech") }
+            override fun onBeginningOfSpeech() { Log.d(TAG, "onBeginningOfSpeech") }
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
+            override fun onEndOfSpeech() { Log.d(TAG, "onEndOfSpeech") }
             override fun onPartialResults(partialResults: Bundle?) {}
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
@@ -195,6 +200,19 @@ class SpeechKitTranslateManager(context: Context) {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale)
         }
+    }
+
+    private fun errorName(error: Int): String = when (error) {
+        SpeechRecognizer.ERROR_AUDIO -> "ERROR_AUDIO"
+        SpeechRecognizer.ERROR_CLIENT -> "ERROR_CLIENT"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "ERROR_INSUFFICIENT_PERMISSIONS"
+        SpeechRecognizer.ERROR_NETWORK -> "ERROR_NETWORK"
+        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "ERROR_NETWORK_TIMEOUT"
+        SpeechRecognizer.ERROR_NO_MATCH -> "ERROR_NO_MATCH"
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "ERROR_RECOGNIZER_BUSY"
+        SpeechRecognizer.ERROR_SERVER -> "ERROR_SERVER"
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "ERROR_SPEECH_TIMEOUT"
+        else -> "UNKNOWN($error)"
     }
 
     private fun stopListening() {
