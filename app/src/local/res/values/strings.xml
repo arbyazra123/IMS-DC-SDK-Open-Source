@@ -20,11 +20,19 @@
 <resources>
     <string name="app_name">DCLocal</string>
     <!--
-      Points OemEC at the real translate-tflite reference provider instead of the
-      TestECManager mock (com.ct.oemec.test.TestECService, the default when this is
-      empty). Only implements the Translate module - Avatar/AIVideo/NewCallSDK requests
-      have no provider while this is active. Clear this string (or delete the line) to
-      go back to the mock.
+      Points OemEC at a real Translate EC provider instead of the TestECManager mock
+      (com.ct.oemec.test.TestECService, the default when this is empty). Only implements
+      the Translate module - Avatar/AIVideo/NewCallSDK requests have no provider while
+      either of these is active. Clear this string (or delete the line) to go back to
+      the mock.
+
+      Two real options, pick one:
+      - com.ct.oemec.translatetflite.TranslateTfliteService (translate-tflite module) -
+        real TFLite Interpreter plumbing, but ships no model files (see its README).
+      - com.ct.oemec.speechkittranslate.SpeechKitTranslateService (translate-speechkit
+        module) - android.speech.SpeechRecognizer + ML Kit Translate, actually produces
+        real recognized/translated text out of the box (Indonesian<->English). See that
+        module's README for its requirements and the mic-ownership caveat.
     -->
-    <string name="expand_capacity_service_cls" translatable="false">com.ct.oemec.translatetflite.TranslateTfliteService</string>
+    <string name="expand_capacity_service_cls" translatable="false">com.ct.oemec.speechkittranslate.SpeechKitTranslateService</string>
 </resources>
