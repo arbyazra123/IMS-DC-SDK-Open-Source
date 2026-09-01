@@ -50,3 +50,4 @@ captures/
 **/unused.txt
 
 document/node_modules
+document/tsel
