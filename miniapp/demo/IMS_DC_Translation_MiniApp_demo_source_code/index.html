@@ -52,15 +52,35 @@
       justify-content: space-between;
       background: #16161c;
     }
-    select {
-      flex: 1;
+    /* Custom dropdown, not a native <select> - native <select> pickers are unreliable
+       inside this SDK's embedded WebView (the picker overlay often just never appears). */
+    .lang-picker { position: relative; flex: 1; }
+    .lang-picker-current {
       background: #22263a;
       color: #fff;
-      border: none;
       border-radius: 8px;
       padding: 8px;
       font-size: 13px;
+      text-align: center;
     }
+    .lang-picker-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background: #22263a;
+      border-radius: 8px;
+      overflow: hidden;
+      z-index: 10;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .lang-picker-menu[hidden] { display: none; }
+    .lang-picker-option {
+      padding: 10px 8px;
+      font-size: 13px;
+      text-align: center;
+    }
+    .lang-picker-option.selected { background: #4c8bf5; }
     .arrow { color: #9aa0b4; }
     .captions {
       flex: 1;
@@ -112,9 +132,15 @@
 <body>
 <div class="stage">
   <div class="header">
-    <select id="myLanguage"></select>
+    <div class="lang-picker" id="myLanguagePicker">
+      <div class="lang-picker-current" id="myLanguageCurrent"></div>
+      <div class="lang-picker-menu" id="myLanguageMenu" hidden></div>
+    </div>
     <span class="arrow">↔</span>
-    <select id="otherLanguage"></select>
+    <div class="lang-picker" id="otherLanguagePicker">
+      <div class="lang-picker-current" id="otherLanguageCurrent"></div>
+      <div class="lang-picker-menu" id="otherLanguageMenu" hidden></div>
+    </div>
   </div>
   <div class="status" id="status">connecting to translation capability…</div>
   <div class="mic-level" id="micLevel">
@@ -155,8 +181,6 @@
     });
   }
   var toggleBtn = document.getElementById("toggleBtn");
-  var myLangSelect = document.getElementById("myLanguage");
-  var otherLangSelect = document.getElementById("otherLanguage");
 
   function ecRequest(module, func, data) {
     dsBridge.call("async", {
@@ -166,32 +190,71 @@
     }, function () {});
   }
 
-  function renderLanguageOptions(list) {
-    [myLangSelect, otherLangSelect].forEach(function (select) {
-      select.innerHTML = "";
-      list.forEach(function (lang) {
-        var opt = document.createElement("option");
-        opt.value = lang;
-        opt.textContent = lang;
-        select.appendChild(opt);
-      });
-    });
-    myLangSelect.value = myLanguage;
-    otherLangSelect.value = otherLanguage;
-  }
-
   function pushSetLanguage() {
     ecRequest("Translate", "setLanguage", { myLanguage: myLanguage, otherLanguage: otherLanguage });
   }
 
-  myLangSelect.addEventListener("change", function () {
-    myLanguage = myLangSelect.value;
-    pushSetLanguage();
+  // --- Custom dropdown (not a native <select> - see the CSS comment for why) ---
+  function makeLangPicker(currentEl, menuEl, getValue, setValue) {
+    function close() { menuEl.hidden = true; }
+    function open() { menuEl.hidden = false; }
+    currentEl.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var otherMenu = menuEl === myLanguageMenu ? otherLanguageMenu : myLanguageMenu;
+      otherMenu.hidden = true;
+      menuEl.hidden = !menuEl.hidden;
+    });
+    return {
+        setOptions: function (list) {
+        menuEl.innerHTML = "";
+        list.forEach(function (lang) {
+          var opt = document.createElement("div");
+          opt.className = "lang-picker-option" + (lang === getValue() ? " selected" : "");
+          opt.textContent = lang;
+          opt.addEventListener("click", function (e) {
+            e.stopPropagation();
+            setValue(lang);
+            currentEl.textContent = lang;
+            Array.prototype.forEach.call(menuEl.children, function (c) {
+              c.classList.toggle("selected", c.textContent === lang);
+            });
+            close();
+            pushSetLanguage();
+          });
+          menuEl.appendChild(opt);
+        });
+      },
+      close: close
+    };
+  }
+
+  var myLanguageCurrent = document.getElementById("myLanguageCurrent");
+  var myLanguageMenu = document.getElementById("myLanguageMenu");
+  var otherLanguageCurrent = document.getElementById("otherLanguageCurrent");
+  var otherLanguageMenu = document.getElementById("otherLanguageMenu");
+  myLanguageCurrent.textContent = myLanguage;
+  otherLanguageCurrent.textContent = otherLanguage;
+
+  var myLanguagePicker = makeLangPicker(
+    myLanguageCurrent, myLanguageMenu,
+    function () { return myLanguage; },
+    function (v) { myLanguage = v; }
+  );
+  var otherLanguagePicker = makeLangPicker(
+    otherLanguageCurrent, otherLanguageMenu,
+    function () { return otherLanguage; },
+    function (v) { otherLanguage = v; }
+  );
+
+  document.addEventListener("click", function () {
+    myLanguagePicker.close();
+    otherLanguagePicker.close();
   });
-  otherLangSelect.addEventListener("change", function () {
-    otherLanguage = otherLangSelect.value;
-    pushSetLanguage();
-  });
+
+  function renderLanguageOptions(list) {
+    myLanguagePicker.setOptions(list);
+    otherLanguagePicker.setOptions(list);
+  }
 
   function addBubble(kind, original, translated) {
     var bubble = document.createElement("div");
