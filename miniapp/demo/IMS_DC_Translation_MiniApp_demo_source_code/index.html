@@ -97,6 +97,16 @@
     }
     .toggle-btn.active { background: #e5484d; }
     .status { text-align: center; color: #9aa0b4; font-size: 12px; padding: 6px; }
+    .status.error { color: #ff8a80; }
+    .mic-level { display: flex; justify-content: center; align-items: center; gap: 6px; padding: 0 0 8px; }
+    .mic-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #2b2f42;
+      transition: background 80ms linear, transform 80ms linear;
+    }
+    .mic-dot.active { background: #4c8bf5; transform: scale(1.35); }
   </style>
 </head>
 <body>
@@ -107,6 +117,9 @@
     <select id="otherLanguage"></select>
   </div>
   <div class="status" id="status">connecting to translation capability…</div>
+  <div class="mic-level" id="micLevel">
+    <span class="mic-dot"></span><span class="mic-dot"></span><span class="mic-dot"></span><span class="mic-dot"></span><span class="mic-dot"></span>
+  </div>
   <div class="captions" id="captions"></div>
   <div class="footer">
     <button class="toggle-btn" id="toggleBtn">Start translating</button>
@@ -126,6 +139,21 @@
 
   var statusEl = document.getElementById("status");
   var captionsEl = document.getElementById("captions");
+  var micDots = document.querySelectorAll("#micLevel .mic-dot");
+
+  function setStatus(text, isError) {
+    statusEl.textContent = text;
+    statusEl.classList.toggle("error", !!isError);
+  }
+
+  function setMicLevel(rms) {
+    // Loud, clear speech is roughly rms 0.15-0.3 on this scale; scale so a normal
+    // speaking voice lights most of the dots rather than needing to shout.
+    var activeCount = Math.max(0, Math.min(micDots.length, Math.round((rms / 0.25) * micDots.length)));
+    micDots.forEach(function (dot, i) {
+      dot.classList.toggle("active", i < activeCount);
+    });
+  }
   var toggleBtn = document.getElementById("toggleBtn");
   var myLangSelect = document.getElementById("myLanguage");
   var otherLangSelect = document.getElementById("otherLanguage");
@@ -189,7 +217,7 @@
     dc = pc.createDataChannel(xml, null);
     dc.onopen = function () {
       peerReady = true;
-      statusEl.textContent = "connected to peer · listening";
+      setStatus("connected to peer · listening");
     };
     dc.onclose = function () {
       peerReady = false;
@@ -296,7 +324,7 @@
 
   function startMicListening() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      statusEl.textContent = "mic not available in this WebView";
+      setStatus("mic not available in this WebView", true);
       return;
     }
     grantMicLicenseOnce();
@@ -339,6 +367,7 @@
           sumSquares += v * v;
         }
         var rms = Math.sqrt(sumSquares / volumeData.length);
+        setMicLevel(rms);
         var now = Date.now();
         if (rms > VOICE_VOLUME_THRESHOLD && now - lastVoiceTriggerAt > VOICE_TRIGGER_COOLDOWN_MS) {
           lastVoiceTriggerAt = now;
@@ -349,7 +378,7 @@
       }
       tick();
     }).catch(function () {
-      statusEl.textContent = "mic permission denied";
+      setStatus("mic permission denied", true);
     });
   }
 
@@ -361,6 +390,7 @@
     if (audioCtx) { audioCtx.close(); audioCtx = null; }
     analyser = null;
     ringBuffer = null;
+    setMicLevel(0);
   }
 
   toggleBtn.addEventListener("click", function () {
@@ -391,9 +421,13 @@
         addBubble("me", payload.data.myOriginal, payload.data.myTranslate);
         sendMyUtteranceToPeer(payload.data.myOriginal, payload.data.myTranslate);
       } else if (payload.func === "setLanguageCallback") {
-        statusEl.textContent = translating
+        setStatus(translating
           ? (peerReady ? "connected to peer · listening" : "connecting to peer…")
-          : payload.data.myLanguage + " ↔ " + payload.data.otherLanguage + " ready";
+          : payload.data.myLanguage + " ↔ " + payload.data.otherLanguage + " ready");
+      } else if (payload.func === "translateErrorCallback") {
+        // The active EC provider (e.g. translate-tflite with no model files staged)
+        // couldn't produce a result — surface why instead of silently doing nothing.
+        setStatus("provider error: " + payload.data.reason, true);
       }
     } catch (e) {}
   });
@@ -403,7 +437,7 @@
     function: "expandingCapacityRegister",
     params: { providerModules: ["OEM-Translate"] }
   }, function () {
-    statusEl.textContent = "translation stopped";
+    setStatus("translation stopped");
     ecRequest("Translate", "languageList", {});
   });
 </script>

@@ -46,7 +46,7 @@ object DefaultMiniAppSeeder {
     // changes — a plain one-time boolean flag would mean re-seeding never happens again on
     // a device that was already seeded, even across app updates, since MiniAppManager keys
     // its extracted copy by appId+eTag and this SPUtils entry only ever gets written once.
-    private const val CURRENT_SEED_CONTENT_VERSION = 2
+    private const val CURRENT_SEED_CONTENT_VERSION = 3
 
     private val sLogger = Logger.getLogger(TAG)
 
@@ -60,7 +60,7 @@ object DefaultMiniAppSeeder {
 
     private val DEFAULT_APPS = listOf(
         DefaultApp(appId = "601", appName = "AI Avatar", assetFileName = "avatar_miniapp.zip", eTag = "1.0.1", supportScene = 2),
-        DefaultApp(appId = "602", appName = "Live Translate", assetFileName = "translation_miniapp.zip", eTag = "1.0.1", supportScene = 3)
+        DefaultApp(appId = "602", appName = "Live Translate", assetFileName = "translation_miniapp.zip", eTag = "1.0.2", supportScene = 3)
     )
 
     fun seedIfNeeded(context: Context) {
