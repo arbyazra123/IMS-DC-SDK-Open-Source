@@ -1,6 +1,6 @@
 {
   "appId": "602",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "permissions": ["MINIAPP_RECORD_AUDIO", "MINIAPP_CAMERA"],
   "windowStyle": {
     "isFullScreen": true,
