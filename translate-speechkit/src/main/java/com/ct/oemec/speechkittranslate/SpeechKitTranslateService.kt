@@ -22,15 +22,26 @@ package com.ct.oemec.speechkittranslate
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
+import android.util.Log
 
 class SpeechKitTranslateService : Service() {
 
+    companion object {
+        private const val TAG = "SpeechKitTranslateService"
+    }
+
     private var manager: SpeechKitTranslateManager? = null
 
-    override fun onBind(intent: Intent?): IBinder {
-        val instance = SpeechKitTranslateManager(applicationContext)
-        manager = instance
-        return instance.binder
+    override fun onBind(intent: Intent?): IBinder? {
+        Log.i(TAG, "onBind")
+        return try {
+            val instance = SpeechKitTranslateManager(applicationContext)
+            manager = instance
+            instance.binder
+        } catch (e: Exception) {
+            Log.e(TAG, "onBind failed to construct manager", e)
+            null
+        }
     }
 
     override fun onUnbind(intent: Intent?): Boolean {

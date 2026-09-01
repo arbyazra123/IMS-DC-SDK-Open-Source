@@ -74,14 +74,22 @@ class SpeechKitTranslateManager(context: Context) {
     private var consecutiveAudioErrors = 0
 
     init {
+        Log.i(TAG, "SpeechKitTranslateManager constructed")
         prepareTranslator()
     }
 
     val binder: IExpandingCapacity.Stub = object : IExpandingCapacity.Stub() {
         override fun request(content: String?) {
-            val json = content?.let { runCatching { gson.fromJson(it, JsonObject::class.java) }.getOrNull() } ?: return
+            Log.d(TAG, "request content:$content")
+            val json = try {
+                content?.let { gson.fromJson(it, JsonObject::class.java) }
+            } catch (e: Exception) {
+                Log.e(TAG, "request failed to parse content", e)
+                null
+            } ?: return
             if (json.get("module")?.asString != "Translate") return
             val data = json.getAsJsonObject("data")
+            try {
             when (json.get("func")?.asString) {
                 "languageList" -> respond("languageListCallback", mapOf("list" to LANGUAGE_TO_RECOGNIZER_LOCALE.keys.toList()))
                 "setLanguage" -> {
@@ -98,6 +106,9 @@ class SpeechKitTranslateManager(context: Context) {
                     // captured buffer (still sent for compatibility with the other two
                     // providers) is simply unused here.
                 }
+            }
+            } catch (e: Exception) {
+                Log.e(TAG, "request handling failed for func:${json.get("func")?.asString}", e)
             }
         }
 
@@ -117,23 +128,33 @@ class SpeechKitTranslateManager(context: Context) {
     }
 
     private fun prepareTranslator() {
-        translator?.close()
-        val sourceLang = LANGUAGE_TO_MLKIT[myLanguage] ?: TranslateLanguage.INDONESIAN
-        val targetLang = LANGUAGE_TO_MLKIT[otherLanguage] ?: TranslateLanguage.ENGLISH
-        val options = TranslatorOptions.Builder()
-            .setSourceLanguage(sourceLang)
-            .setTargetLanguage(targetLang)
-            .build()
-        val newTranslator = Translation.getClient(options)
-        // One-time download per language pair; needs internet the first time, works
-        // offline afterward. Failure here (e.g. no network yet) is reported, not silent.
-        newTranslator.downloadModelIfNeeded()
-            .addOnSuccessListener { Log.i(TAG, "translation model ready: $myLanguage -> $otherLanguage") }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "translation model download failed", e)
-                respondError("translation model download failed (needs internet the first time): ${e.message}")
-            }
-        translator = newTranslator
+        // Defensive: this runs from the constructor (init block) - if ML Kit throws here
+        // for any reason (e.g. Play Services unavailable), it must not prevent the
+        // manager/binder from being constructed at all, or EVERY request (including
+        // completely unrelated ones like languageList) silently goes nowhere.
+        try {
+            translator?.close()
+            translator = null
+            val sourceLang = LANGUAGE_TO_MLKIT[myLanguage] ?: TranslateLanguage.INDONESIAN
+            val targetLang = LANGUAGE_TO_MLKIT[otherLanguage] ?: TranslateLanguage.ENGLISH
+            val options = TranslatorOptions.Builder()
+                .setSourceLanguage(sourceLang)
+                .setTargetLanguage(targetLang)
+                .build()
+            val newTranslator = Translation.getClient(options)
+            // One-time download per language pair; needs internet the first time, works
+            // offline afterward. Failure here (e.g. no network yet) is reported, not silent.
+            newTranslator.downloadModelIfNeeded()
+                .addOnSuccessListener { Log.i(TAG, "translation model ready: $myLanguage -> $otherLanguage") }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "translation model download failed", e)
+                    respondError("translation model download failed (needs internet the first time): ${e.message}")
+                }
+            translator = newTranslator
+        } catch (e: Exception) {
+            Log.e(TAG, "prepareTranslator failed", e)
+            respondError("failed to initialize ML Kit translator: ${e.message}")
+        }
     }
 
     private fun startListening() {
