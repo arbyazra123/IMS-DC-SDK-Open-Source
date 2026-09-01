@@ -43,38 +43,48 @@ class HotspotIpHelper(private val context: Context) {
     }
 
     /**
-     * 通过遍历网络接口获取热点IP
+     * 通过遍历网络接口获取可用于P2P连接的IP（WiFi/热点局域网地址，或Tailscale等VPN覆盖网络地址）。
+     * 不再限制接口名称包含"wlan"/"ap"/"softap"——Tailscale等VPN在Android上通常以tun接口出现，
+     * 名称不匹配这些关键字，仅靠接口名过滤会在纯移动数据+VPN场景下永远找不到可用地址。
+     * 改为遍历全部非回环IPv4接口，按地址段判断是否可用（局域网私有地址或Tailscale CGNAT段）。
      */
     private fun getHotspotIpFromInterfaces(): String? {
         return try {
+            var fallback: String? = null
             val interfaces = NetworkInterface.getNetworkInterfaces()
             while (interfaces.hasMoreElements()) {
                 val networkInterface = interfaces.nextElement()
-
-                // 检查接口名称，热点接口通常包含 "wlan", "ap", "softap" 等
-                val interfaceName = networkInterface.name
-                if (interfaceName.contains("wlan") ||
-                    interfaceName.contains("ap") ||
-                    interfaceName.contains("softap")) {
-
-                    val addresses = networkInterface.inetAddresses
-                    while (addresses.hasMoreElements()) {
-                        val address = addresses.nextElement()
-                        // 获取IPv4地址，热点通常是192.168.x.x或类似私有地址
-                        if (address is Inet4Address && !address.isLoopbackAddress) {
-                            val ip = address.hostAddress
-                            if (isHotspotIp(ip)) {
-                                return ip
-                            }
+                val addresses = networkInterface.inetAddresses
+                while (addresses.hasMoreElements()) {
+                    val address = addresses.nextElement()
+                    if (address is Inet4Address && !address.isLoopbackAddress) {
+                        val ip = address.hostAddress ?: continue
+                        if (isTailscaleIp(ip)) {
+                            // Tailscale地址优先返回：纯移动数据场景下，这通常是唯一能被对端设备访问到的地址
+                            return ip
+                        }
+                        if (isHotspotIp(ip) && fallback == null) {
+                            fallback = ip
                         }
                     }
                 }
             }
-            null
+            fallback
         } catch (e: Exception) {
             Log.e("HotspotIpHelper", "Error getting IP from interfaces: ${e.message}")
             null
         }
+    }
+
+    /**
+     * Tailscale（及其他基于CGNAT段的overlay网络）分配的地址段：100.64.0.0/10
+     */
+    private fun isTailscaleIp(ip: String): Boolean {
+        val parts = ip.split(".")
+        if (parts.size != 4) return false
+        val first = parts[0].toIntOrNull() ?: return false
+        val second = parts[1].toIntOrNull() ?: return false
+        return first == 100 && second in 64..127
     }
 
     /**
