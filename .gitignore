@@ -48,3 +48,5 @@ captures/
 **/mapping.txt
 **/seeds.txt
 **/unused.txt
+
+document/node_modules
