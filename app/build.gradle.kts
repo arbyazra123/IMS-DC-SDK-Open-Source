@@ -158,6 +158,7 @@ dependencies {
     })
 
     implementation(project(":core"))
+    implementation(project(":translate-tflite"))
 
     implementation(libs.apache.compress)
     implementation(libs.navigation.fragment.ktx)

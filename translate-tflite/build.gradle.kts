@@ -27,13 +27,14 @@ android {
     defaultConfig {
         consumerProguardFiles("consumer-rules.pro")
     }
-
-    buildFeatures {
-        aidl = true
-    }
 }
 
 dependencies {
+    // IExpandingCapacity/IExpandingCapacityCallback come from oemec's own AIDL sources -
+    // compileOnly so we don't compile a second, duplicate copy of those generated classes
+    // into this module (that caused a duplicate-class dex-merge failure). At runtime the
+    // real classes are already present because oemec is on the app's classpath too.
+    compileOnly(project(":oemec"))
     implementation(libs.core.ktx)
     implementation(libs.gson)
     implementation(libs.kotlinx.coroutines.android)

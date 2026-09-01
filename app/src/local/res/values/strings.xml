@@ -19,4 +19,12 @@
 
 <resources>
     <string name="app_name">DCLocal</string>
+    <!--
+      Points OemEC at the real translate-tflite reference provider instead of the
+      TestECManager mock (com.ct.oemec.test.TestECService, the default when this is
+      empty). Only implements the Translate module - Avatar/AIVideo/NewCallSDK requests
+      have no provider while this is active. Clear this string (or delete the line) to
+      go back to the mock.
+    -->
+    <string name="expand_capacity_service_cls" translatable="false">com.ct.oemec.translatetflite.TranslateTfliteService</string>
 </resources>
