@@ -36,7 +36,7 @@ object TestECManager {
     private var mAvatarTimer: Timer? = null
     private var mAvatarTask: TimerTask? = null
     private var mCurrentAvatarId: String = "avatar_cat"
-    private var mMyLanguage: String = "Chinese"
+    private var mMyLanguage: String = "Indonesian"
     private var mOtherLanguage: String = "English"
 
     // module,func -> data，仅用于本地mock，模拟云端AI能力（真实场景中AI能力应部署在云端，
@@ -62,6 +62,16 @@ object TestECManager {
         ("Chinese" to "Japanese") to listOf(
             mapOf("myOriginal" to "你好", "myTranslate" to "こんにちは"),
             mapOf("myOriginal" to "谢谢", "myTranslate" to "ありがとう")
+        ),
+        ("Indonesian" to "English") to listOf(
+            mapOf("myOriginal" to "halo", "myTranslate" to "hello"),
+            mapOf("myOriginal" to "cuacanya bagus hari ini", "myTranslate" to "the weather is nice today"),
+            mapOf("myOriginal" to "sampai jumpa", "myTranslate" to "goodbye")
+        ),
+        ("English" to "Indonesian") to listOf(
+            mapOf("myOriginal" to "good morning", "myTranslate" to "selamat pagi"),
+            mapOf("myOriginal" to "how are you", "myTranslate" to "apa kabar"),
+            mapOf("myOriginal" to "see you later", "myTranslate" to "sampai nanti")
         )
     )
     private var mMyPhraseIndex = 0
@@ -96,7 +106,7 @@ object TestECManager {
                             val responseData = OEMECBaseData(
                                 "Translate",
                                 "languageListCallback",
-                                mutableMapOf("list" to mutableListOf("Chinese", "English", "Japanese"))
+                                mutableMapOf("list" to mutableListOf("Indonesian", "English", "Chinese", "Japanese"))
                             )
                             val responseString = JsonUtil.toJson(responseData)
                             mCallback?.onCallback(responseString)

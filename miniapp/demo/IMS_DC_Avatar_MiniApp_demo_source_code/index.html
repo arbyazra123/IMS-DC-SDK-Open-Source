@@ -63,7 +63,10 @@
     .avatar-face.mouth-open { transform: scale(1.06); }
     .status {
       position: absolute;
-      top: 16px;
+      /* The SDK always overlays a ~50dp-tall capsule (back/settings/close) at the very
+         top of the mini-app view, regardless of windowStyle - clear it instead of
+         colliding. */
+      top: 60px;
       left: 0;
       right: 0;
       text-align: center;

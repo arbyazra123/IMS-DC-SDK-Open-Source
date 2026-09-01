@@ -55,7 +55,7 @@ class TranslateTfliteManager(context: Context) {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     var callback: IExpandingCapacityCallback? = null
-    private var myLanguage = "Chinese"
+    private var myLanguage = "Indonesian"
     private var otherLanguage = "English"
 
     val binder: IExpandingCapacity.Stub = object : IExpandingCapacity.Stub() {
@@ -66,7 +66,7 @@ class TranslateTfliteManager(context: Context) {
             val data = json.getAsJsonObject("data")
             if (module != "Translate") return
             when (func) {
-                "languageList" -> respond("languageListCallback", mapOf("list" to listOf("Chinese", "English", "Japanese")))
+                "languageList" -> respond("languageListCallback", mapOf("list" to listOf("Indonesian", "English", "Chinese", "Japanese")))
                 "setLanguage" -> {
                     data?.get("myLanguage")?.asString?.let { myLanguage = it }
                     data?.get("otherLanguage")?.asString?.let { otherLanguage = it }

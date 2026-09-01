@@ -39,8 +39,14 @@ import java.io.FileOutputStream
  */
 object DefaultMiniAppSeeder {
     private const val TAG = "DefaultMiniAppSeeder"
-    private const val SEEDED_FLAG_KEY = "DefaultMiniAppsSeededV1"
+    private const val SEEDED_CONTENT_VERSION_KEY = "DefaultMiniAppsSeededContentVersion"
     private const val MINI_APP_LIST_KEY = "TestMiniAppList"
+
+    // Bump this (and each affected DefaultApp's eTag) whenever the bundled zip content
+    // changes — a plain one-time boolean flag would mean re-seeding never happens again on
+    // a device that was already seeded, even across app updates, since MiniAppManager keys
+    // its extracted copy by appId+eTag and this SPUtils entry only ever gets written once.
+    private const val CURRENT_SEED_CONTENT_VERSION = 2
 
     private val sLogger = Logger.getLogger(TAG)
 
@@ -48,31 +54,33 @@ object DefaultMiniAppSeeder {
         val appId: String,
         val appName: String,
         val assetFileName: String,
+        val eTag: String,
         val supportScene: Int // SupportScene: 1=AUDIO, 2=VIDEO, 3=ALL
     )
 
     private val DEFAULT_APPS = listOf(
-        DefaultApp(appId = "601", appName = "AI Avatar", assetFileName = "avatar_miniapp.zip", supportScene = 2),
-        DefaultApp(appId = "602", appName = "Live Translate", assetFileName = "translation_miniapp.zip", supportScene = 3)
+        DefaultApp(appId = "601", appName = "AI Avatar", assetFileName = "avatar_miniapp.zip", eTag = "1.0.1", supportScene = 2),
+        DefaultApp(appId = "602", appName = "Live Translate", assetFileName = "translation_miniapp.zip", eTag = "1.0.1", supportScene = 3)
     )
 
     fun seedIfNeeded(context: Context) {
         val sp = SPUtils.getInstance()
-        if (sp.getBoolean(SEEDED_FLAG_KEY, false)) return
+        if (sp.getInt(SEEDED_CONTENT_VERSION_KEY, 0) >= CURRENT_SEED_CONTENT_VERSION) return
 
         val existingList = sp.getString(MINI_APP_LIST_KEY)
-        val existingAppIds = parseAppIds(existingList)
+        val defaultAppIds = DEFAULT_APPS.map { it.appId }.toSet()
+        // Drop any previous entries for our own default app IDs so this re-seed replaces
+        // them (new eTag/zipPath) rather than being skipped as "already present" or
+        // duplicated alongside the stale one.
+        val keptEntries = existingList?.split(",")?.filter { item ->
+            item.isNotEmpty() && parseAppId(item) !in defaultAppIds
+        } ?: emptyList()
 
-        val builder = StringBuilder(existingList ?: "")
-        DEFAULT_APPS.forEach { app ->
-            if (app.appId in existingAppIds) {
-                sLogger.info("seedIfNeeded appId:${app.appId} already present, skipping")
-                return@forEach
-            }
+        val newEntries = DEFAULT_APPS.mapNotNull { app ->
             val zipPath = copyAssetToInternalStorage(context, app.assetFileName)
             if (zipPath == null) {
                 sLogger.error("seedIfNeeded failed to stage asset ${app.assetFileName}")
-                return@forEach
+                return@mapNotNull null
             }
             val miniAppInfo = MiniAppInfo(
                 appId = app.appId,
@@ -81,7 +89,7 @@ object DefaultMiniAppSeeder {
                 autoLaunch = false,
                 autoLoad = false,
                 callId = "",
-                eTag = "1.0.0",
+                eTag = app.eTag,
                 ifWorkWithoutPeerDc = true,
                 isOutgoingCall = false,
                 myNumber = null,
@@ -94,23 +102,19 @@ object DefaultMiniAppSeeder {
                 isStartAfterInstalled = true,
                 lastUseTime = 0
             )
-            val entry = Base64Utils.encodeToBase64(JsonUtil.toJson(miniAppInfo)) + "&zipPath=" + zipPath
-            if (builder.isNotEmpty()) builder.append(",")
-            builder.append(entry)
-            sLogger.info("seedIfNeeded added default mini-app appId:${app.appId} zipPath:$zipPath")
+            sLogger.info("seedIfNeeded (re)seeding appId:${app.appId} eTag:${app.eTag} zipPath:$zipPath")
+            Base64Utils.encodeToBase64(JsonUtil.toJson(miniAppInfo)) + "&zipPath=" + zipPath
         }
-        sp.put(MINI_APP_LIST_KEY, builder.toString())
-        sp.put(SEEDED_FLAG_KEY, true)
+
+        sp.put(MINI_APP_LIST_KEY, (keptEntries + newEntries).joinToString(","))
+        sp.put(SEEDED_CONTENT_VERSION_KEY, CURRENT_SEED_CONTENT_VERSION)
     }
 
-    private fun parseAppIds(list: String?): Set<String> {
-        if (list.isNullOrEmpty()) return emptySet()
-        return list.split(",").mapNotNull { item ->
-            runCatching {
-                val split = item.split("&zipPath=")
-                JsonUtil.fromJson(Base64Utils.decodeFromBase64(split[0]), MiniAppInfo::class.java)?.appId
-            }.getOrNull()
-        }.toSet()
+    private fun parseAppId(entry: String): String? {
+        return runCatching {
+            val split = entry.split("&zipPath=")
+            JsonUtil.fromJson(Base64Utils.decodeFromBase64(split[0]), MiniAppInfo::class.java)?.appId
+        }.getOrNull()
     }
 
     private fun copyAssetToInternalStorage(context: Context, assetFileName: String): String? {
@@ -118,10 +122,11 @@ object DefaultMiniAppSeeder {
             val outDir = File(context.filesDir, "default_miniapps")
             if (!outDir.exists()) outDir.mkdirs()
             val outFile = File(outDir, assetFileName)
-            if (!outFile.exists()) {
-                context.assets.open(assetFileName).use { input ->
-                    FileOutputStream(outFile).use { output -> input.copyTo(output) }
-                }
+            // Always overwrite: this runs only when CURRENT_SEED_CONTENT_VERSION advanced,
+            // meaning the bundled asset content actually changed and any previously staged
+            // copy is stale.
+            context.assets.open(assetFileName).use { input ->
+                FileOutputStream(outFile).use { output -> input.copyTo(output) }
             }
             outFile.absolutePath
         } catch (e: Exception) {
